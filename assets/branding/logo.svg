@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- NutriSemáforo: plato + semáforo + hoja -->
+  <circle cx="481" cy="543" r="400" fill="#FFFFFF"/>
+  <circle cx="481" cy="543" r="400" fill="none" stroke="#E7ECE4" stroke-width="51"/>
+  <circle cx="481" cy="543" r="288" fill="none" stroke="#E7ECE4" stroke-opacity="0.7" stroke-width="18"/>
+  <rect x="358" y="256" width="246" height="574" rx="123" fill="#1C2620"/>
+  <circle cx="481" cy="374" r="67" fill="#E0483E"/>
+  <circle cx="481" cy="543" r="67" fill="#F08C1A"/>
+  <circle cx="481" cy="712" r="67" fill="#2E9E5B"/>
+  <path d="M758 266 Q737 20 993 31 Q1014 266 758 266 Z" fill="#2E9E5B"/>
+  <line x1="758" y1="266" x2="865" y2="146" stroke="#1F6B3F" stroke-width="18" stroke-linecap="round"/>
+</svg>
