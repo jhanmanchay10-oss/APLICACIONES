@@ -49,7 +49,7 @@ lib/
 └── widgets/         componentes reutilizables (logo, semáforo, tarjetas, gráficos)
 supabase/
 ├── migrations/      esquema PostgreSQL + RLS + bucket de fotos
-└── functions/analyze-meal/   Edge Function con Claude (visión)
+└── functions/analyze-meal/   Edge Function con GPT de OpenAI (visión)
 ```
 
 **¿Por qué Riverpod?** Inyección de dependencias sin `BuildContext`, estado asíncrono (`AsyncNotifier`) con carga/error integrados, providers derivados (el resumen semanal se recalcula solo cuando cambian las comidas) y overrides sencillos en pruebas. Bloc sería válido, pero requiere más código repetitivo para esta escala.
@@ -85,9 +85,9 @@ Todos los umbrales están en un único archivo: `lib/core/config/nutrition_crite
    supabase link --project-ref TU_PROYECTO
    supabase db push
    ```
-3. Despliega la función de IA con tu clave de Anthropic (solo vive en el servidor):
+3. Despliega la función de IA con tu clave de OpenAI (GPT) (solo vive en el servidor):
    ```bash
-   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+   supabase secrets set OPENAI_API_KEY=sk-...
    supabase functions deploy analyze-meal
    ```
 4. En GitHub → *Settings → Secrets and variables → Actions*, agrega `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY`. El siguiente build activará cuenta, sincronización y análisis de fotos.
