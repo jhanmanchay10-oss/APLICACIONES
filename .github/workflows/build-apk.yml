@@ -101,8 +101,10 @@ jobs:
               echo "storeFile=upload-keystore.jks"
             } > android/key.properties
             echo "Firma fija configurada: las actualizaciones se instalan sin desinstalar."
+            echo "UPDATE_NOTE=Si ya tenías la app (versión con firma fija), se actualiza sin perder tus comidas." >> "$GITHUB_ENV"
           else
             echo "::warning title=Firma temporal::Sin ANDROID_KEYSTORE_BASE64 cada APK tiene otra firma y hay que desinstalar la versión anterior."
+            echo "UPDATE_NOTE=Si ya tenías una versión anterior, desinstálala antes de instalar esta." >> "$GITHUB_ENV"
           fi
 
       - name: Compilar APK
@@ -133,4 +135,4 @@ jobs:
 
             1. Descarga `NutriSemaforo.apk` desde tu teléfono.
             2. Ábrelo y permite "Instalar apps de origen desconocido".
-            3. Si ya tenías la app, se actualiza sin perder tus comidas.
+            3. ${{ env.UPDATE_NOTE }}
