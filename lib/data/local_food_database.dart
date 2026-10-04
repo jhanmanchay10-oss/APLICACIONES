@@ -18,45 +18,78 @@ class LocalFoodDatabase {
     return null;
   }
 
-  List<FoodItem> search(String query, {int limit = 30}) {
-    final normalized = TextUtils.normalize(query);
-    if (normalized.isEmpty) return _foods.take(limit).toList();
+  /// Búsqueda tolerante: ignora tildes, plurales y palabras como "de" o "con",
+  /// y acepta coincidencias parciales ("huevos cocidos" encuentra "Huevo").
+  /// [minRatio] es la fracción mínima de palabras de la búsqueda que deben coincidir.
+  List<FoodItem> search(String query, {int limit = 30, double minRatio = 0.5}) {
+    final queryTokens = _tokens(query);
+    if (queryTokens.isEmpty) return _foods.take(limit).toList();
+    final joinedQuery = queryTokens.join(' ');
 
-    final scored = <(FoodItem, int)>[];
+    final scored = <(FoodItem, double)>[];
     for (final food in _foods) {
-      final names = [food.name, ...food.aliases].map(TextUtils.normalize);
-      var best = 0;
-      for (final name in names) {
-        if (name == normalized) {
-          best = 3;
-        } else if (name.startsWith(normalized) && best < 2) {
-          best = 2;
-        } else if (name.contains(normalized) && best < 1) {
-          best = 1;
+      var best = 0.0;
+      for (final candidate in [food.name, ...food.aliases]) {
+        final tokens = _tokens(candidate);
+        if (tokens.isEmpty) continue;
+        final joined = tokens.join(' ');
+        double score;
+        if (joined == joinedQuery) {
+          score = 100;
+        } else if (joined.startsWith(joinedQuery)) {
+          score = 80;
+        } else {
+          final matched = queryTokens.where((q) => tokens.any((t) => t == q || t.startsWith(q))).length;
+          final ratio = matched / queryTokens.length;
+          if (ratio < minRatio) continue;
+          // Premia coincidir con más palabras y nombres cortos (más específicos).
+          score = ratio * 60 + (matched / tokens.length) * 10;
         }
+        // Coincidencias con el nombre principal pesan un poco más que con alias.
+        if (candidate == food.name) score += 1;
+        if (score > best) best = score;
       }
       if (best > 0) scored.add((food, best));
     }
-    scored.sort((a, b) => b.$2.compareTo(a.$2));
+    scored.sort((a, b) {
+      final byScore = b.$2.compareTo(a.$2);
+      return byScore != 0 ? byScore : a.$1.name.length.compareTo(b.$1.name.length);
+    });
     return scored.take(limit).map((entry) => entry.$1).toList();
   }
 
   /// Busca el alimento local que mejor coincide con un nombre detectado por IA.
+  /// Solo acepta coincidencias completas para no perder nutrientes (ej. no
+  /// confundir "papa a la huancaína" con "papa sancochada").
   FoodItem? bestMatch(String name) {
-    final normalized = TextUtils.normalize(name);
-    if (normalized.isEmpty) return null;
-    for (final food in _foods) {
-      final names = [food.name, ...food.aliases].map(TextUtils.normalize);
-      if (names.contains(normalized)) return food;
+    final matches = search(name, limit: 1, minRatio: 1);
+    return matches.isEmpty ? null : matches.first;
+  }
+
+  /// Palabras que no cambian el alimento (conectores, preparaciones simples y medidas).
+  static const _stopWords = {
+    'de', 'del', 'con', 'a', 'al', 'la', 'el', 'lo', 'los', 'las', 'en', 'y', 'un', 'una', 'para', 'sin',
+    'cocido', 'cocida', 'sancochado', 'sancochada', 'hervido', 'hervida', 'entero', 'entera',
+    'picado', 'picada', 'natural', 'porcion', 'vaso', 'taza', 'plato', 'unidad', 'grande', 'mediano',
+    'mediana', 'pequeno', 'pequena',
+  };
+
+  static List<String> _tokens(String text) => TextUtils.normalize(text)
+      .replaceAll(RegExp(r'[^a-z0-9 ]'), ' ')
+      .split(' ')
+      .where((token) => token.isNotEmpty && !RegExp(r'^\d+$').hasMatch(token))
+      .map(_singular)
+      .where((token) => !_stopWords.contains(token))
+      .toList();
+
+  /// Singular aproximado en español: huevos → huevo, frejoles → frejol, panes → pan.
+  static String _singular(String word) {
+    if (word.length > 4 && word.endsWith('es')) {
+      final stem = word.substring(0, word.length - 2);
+      if (RegExp(r'[lnrdzj]$').hasMatch(stem)) return stem;
     }
-    final partial = search(normalized, limit: 1);
-    if (partial.isNotEmpty) return partial.first;
-    // Coincidencia inversa: "arroz blanco cocido" contiene "arroz blanco".
-    for (final food in _foods) {
-      final names = [food.name, ...food.aliases].map(TextUtils.normalize);
-      if (names.any((candidate) => candidate.length >= 4 && normalized.contains(candidate))) return food;
-    }
-    return null;
+    if (word.length > 3 && word.endsWith('s')) return word.substring(0, word.length - 1);
+    return word;
   }
 }
 
@@ -154,7 +187,7 @@ final List<FoodItem> _foods = [
   _f('cerdo', 'Carne de cerdo', FoodCategory.redMeat, kcal: 242, protein: 27, fat: 14, satFat: 5, sodium: 62, portion: 120, aliases: ['pork', 'chuleta', 'chancho']),
   _f('pescado', 'Pescado', FoodCategory.fish, kcal: 105, protein: 23, fat: 1, satFat: 0.2, sodium: 80, portion: 150, aliases: ['fish', 'filete de pescado', 'pescado a la plancha', 'salmon', 'tilapia', 'bonito']),
   _f('atun', 'Atún en conserva', FoodCategory.fish, kcal: 116, protein: 26, fat: 0.8, satFat: 0.2, sodium: 340, portion: 80, nova: 3, aliases: ['tuna', 'atun']),
-  _f('huevo', 'Huevo', FoodCategory.egg, kcal: 155, protein: 13, carbs: 1.1, fat: 11, satFat: 3.3, sugar: 1.1, sodium: 124, portion: 60, aliases: ['egg', 'huevo duro', 'huevo sancochado', 'eggs']),
+  _f('huevo', 'Huevo', FoodCategory.egg, kcal: 155, protein: 13, carbs: 1.1, fat: 11, satFat: 3.3, sugar: 1.1, sodium: 124, portion: 60, aliases: ['egg', 'huevo cocido', 'huevo duro', 'huevo sancochado', 'huevo hervido', 'eggs', 'boiled egg']),
   _f('huevo_frito', 'Huevo frito', FoodCategory.egg, kcal: 196, protein: 13.6, carbs: 0.8, fat: 15, satFat: 4.3, sugar: 0.4, sodium: 207, portion: 60, aliases: ['fried egg', 'huevos revueltos', 'scrambled eggs']),
   _f('salchicha', 'Salchicha', FoodCategory.processedMeat, kcal: 290, protein: 11, carbs: 3, fat: 26, satFat: 10, sugar: 1.5, sodium: 950, portion: 60, nova: 4, aliases: ['hot dog', 'sausage', 'salchicha frankfurt']),
   _f('jamon', 'Jamón', FoodCategory.processedMeat, kcal: 145, protein: 21, carbs: 1.5, fat: 6, satFat: 2, sugar: 1, sodium: 1200, portion: 40, nova: 4, aliases: ['ham', 'jamonada', 'embutido']),
@@ -195,4 +228,70 @@ final List<FoodItem> _foods = [
   _f('chicha_morada', 'Chicha morada', FoodCategory.sugaryDrink, kcal: 50, carbs: 12.5, sugar: 11, sodium: 3, portion: 250, nova: 3, aliases: ['chicha']),
   _f('cafe', 'Café sin azúcar', FoodCategory.beverage, kcal: 2, protein: 0.1, sodium: 2, portion: 200, aliases: ['cafe', 'coffee', 'te', 'infusion', 'tea']),
   _f('agua', 'Agua', FoodCategory.beverage, kcal: 0, portion: 250, aliases: ['water']),
+
+  // Cocina peruana y más (estimaciones promedio por 100 g)
+  _f('causa', 'Causa limeña', FoodCategory.mixedDish, kcal: 165, protein: 5, carbs: 20, fat: 7, satFat: 1.2, fiber: 1.8, sugar: 1, sodium: 300, portion: 200, nova: 3, aliases: ['causa', 'causa rellena', 'causa de pollo', 'causa de atun']),
+  _f('papa_huancaina', 'Papa a la huancaína', FoodCategory.mixedDish, kcal: 150, protein: 4, carbs: 15, fat: 8, satFat: 3, fiber: 1.5, sugar: 1.5, sodium: 280, portion: 250, nova: 3, aliases: ['huancaina', 'papa huancaina', 'salsa huancaina']),
+  _f('arroz_chaufa', 'Arroz chaufa', FoodCategory.mixedDish, kcal: 175, protein: 7, carbs: 25, fat: 5, satFat: 1.2, fiber: 1, sugar: 1.5, sodium: 520, portion: 350, nova: 3, aliases: ['chaufa', 'arroz frito', 'fried rice', 'aeropuerto']),
+  _f('tallarines_verdes', 'Tallarines verdes', FoodCategory.mixedDish, kcal: 160, protein: 6, carbs: 20, fat: 6.5, satFat: 2.5, fiber: 1.5, sugar: 1.5, sodium: 300, portion: 350, nova: 3, aliases: ['tallarin verde', 'pesto']),
+  _f('tallarines_rojos', 'Tallarines rojos', FoodCategory.mixedDish, kcal: 150, protein: 7, carbs: 20, fat: 4.5, satFat: 1.2, fiber: 1.8, sugar: 3, sodium: 330, portion: 350, nova: 3, aliases: ['tallarin rojo', 'spaghetti con salsa', 'pasta con salsa roja']),
+  _f('tallarin_saltado', 'Tallarín saltado', FoodCategory.mixedDish, kcal: 165, protein: 9, carbs: 19, fat: 6, satFat: 1.6, fiber: 1.4, sugar: 2, sodium: 480, portion: 350, nova: 3, aliases: ['tallarin saltado de pollo', 'tallarin saltado de carne']),
+  _f('seco', 'Seco de res', FoodCategory.mixedDish, kcal: 140, protein: 12, carbs: 6, fat: 7.5, satFat: 2.8, fiber: 1.2, sugar: 1, sodium: 380, portion: 250, nova: 3, aliases: ['seco', 'seco de carne', 'seco de cordero', 'seco de pollo', 'seco con frejoles']),
+  _f('estofado', 'Estofado de pollo', FoodCategory.mixedDish, kcal: 115, protein: 10, carbs: 8, fat: 5, satFat: 1.3, fiber: 1.5, sugar: 2, sodium: 330, portion: 300, nova: 3, aliases: ['estofado', 'guiso de pollo']),
+  _f('pollo_saltado', 'Pollo saltado', FoodCategory.mixedDish, kcal: 140, protein: 11, carbs: 10, fat: 6.5, satFat: 1.5, fiber: 1.2, sugar: 2, sodium: 430, portion: 300, nova: 3, aliases: ['saltado de pollo']),
+  _f('cau_cau', 'Cau cau', FoodCategory.mixedDish, kcal: 110, protein: 9, carbs: 9, fat: 4.5, satFat: 1.5, fiber: 1.2, sugar: 0.8, sodium: 350, portion: 300, nova: 3, aliases: ['cau cau de mondongo']),
+  _f('carapulcra', 'Carapulcra', FoodCategory.mixedDish, kcal: 170, protein: 9, carbs: 18, fat: 7, satFat: 2.2, fiber: 2, sugar: 1, sodium: 350, portion: 300, nova: 3, aliases: ['sopa seca con carapulcra']),
+  _f('olluquito', 'Olluquito con charqui', FoodCategory.mixedDish, kcal: 95, protein: 6, carbs: 10, fat: 3.5, satFat: 1, fiber: 1.5, sugar: 2, sodium: 380, portion: 300, nova: 3, aliases: ['olluquito', 'olluco con carne']),
+  _f('rocoto_relleno', 'Rocoto relleno', FoodCategory.mixedDish, kcal: 150, protein: 8, carbs: 9, fat: 9, satFat: 4, fiber: 1.5, sugar: 3, sodium: 350, portion: 250, nova: 3, aliases: []),
+  _f('adobo', 'Adobo de cerdo', FoodCategory.redMeat, kcal: 170, protein: 15, carbs: 3, fat: 11, satFat: 3.8, fiber: 0.5, sugar: 1, sodium: 450, portion: 250, nova: 3, aliases: ['adobo', 'adobo arequipeño']),
+  _f('anticuchos', 'Anticuchos', FoodCategory.redMeat, kcal: 150, protein: 22, carbs: 3, fat: 5.5, satFat: 1.8, fiber: 0.3, sugar: 0.5, sodium: 400, portion: 150, nova: 3, aliases: ['anticucho', 'corazon de res']),
+  _f('chicharron', 'Chicharrón de cerdo', FoodCategory.redMeat, kcal: 380, protein: 25, fat: 31, satFat: 11, sodium: 550, portion: 120, nova: 3, aliases: ['chicharron', 'chicharron de chancho']),
+  _f('pan_chicharron', 'Pan con chicharrón', FoodCategory.mixedDish, kcal: 270, protein: 12, carbs: 25, fat: 14, satFat: 4.5, fiber: 1.5, sugar: 2, sodium: 550, portion: 200, nova: 3, aliases: ['sanguche de chicharron']),
+  _f('tamal', 'Tamal', FoodCategory.mixedDish, kcal: 200, protein: 6, carbs: 22, fat: 10, satFat: 3.5, fiber: 2, sugar: 1, sodium: 400, portion: 150, nova: 3, aliases: ['tamales', 'humita', 'tamalito verde']),
+  _f('juane', 'Juane', FoodCategory.mixedDish, kcal: 200, protein: 8, carbs: 22, fat: 9, satFat: 2.5, fiber: 1, sugar: 0.5, sodium: 380, portion: 300, nova: 3, aliases: []),
+  _f('tacu_tacu', 'Tacu tacu', FoodCategory.mixedDish, kcal: 190, protein: 7, carbs: 26, fat: 6.5, satFat: 1, fiber: 5, sugar: 0.5, sodium: 320, portion: 250, nova: 3, aliases: []),
+  _f('caldo_gallina', 'Caldo de gallina', FoodCategory.mixedDish, kcal: 70, protein: 6, carbs: 5, fat: 3, satFat: 0.9, fiber: 0.3, sugar: 0.5, sodium: 350, portion: 400, nova: 3, aliases: ['caldo de pollo', 'sopa de pollo', 'aguadito', 'chilcano']),
+  _f('salchipapa', 'Salchipapa', FoodCategory.fastFood, kcal: 280, protein: 8, carbs: 25, fat: 17, satFat: 5, fiber: 2.5, sugar: 1, sodium: 600, portion: 300, nova: 4, aliases: ['salchipapas']),
+  _f('tortilla_verduras', 'Tortilla de verduras', FoodCategory.egg, kcal: 150, protein: 9, carbs: 5, fat: 10.5, satFat: 2.5, fiber: 1.2, sugar: 2, sodium: 300, portion: 150, nova: 3, aliases: ['omelette', 'tortilla de huevo', 'tortilla de espinaca']),
+
+  // Frutas y verduras andinas y amazónicas
+  _f('lucuma', 'Lúcuma', _fruit, kcal: 99, protein: 1.5, carbs: 25, fat: 0.5, fiber: 1.3, sugar: 10, sodium: 5, portion: 100, aliases: []),
+  _f('chirimoya', 'Chirimoya', _fruit, kcal: 75, protein: 1.6, carbs: 18, fat: 0.7, fiber: 3, sugar: 13, sodium: 7, portion: 150, aliases: []),
+  _f('granadilla', 'Granadilla', _fruit, kcal: 97, protein: 2.4, carbs: 23, fat: 0.7, fiber: 6, sugar: 11, sodium: 20, portion: 100, aliases: []),
+  _f('maracuya', 'Maracuyá', _fruit, kcal: 97, protein: 2.2, carbs: 23, fat: 0.7, fiber: 10, sugar: 11, sodium: 28, portion: 50, aliases: ['fruta de la pasion', 'passion fruit']),
+  _f('aguaymanto', 'Aguaymanto', _fruit, kcal: 53, protein: 1.9, carbs: 11, fat: 0.7, fiber: 4.9, sugar: 8, sodium: 1, portion: 80, aliases: ['physalis', 'uchuva']),
+  _f('mandarina', 'Mandarina', _fruit, kcal: 53, protein: 0.8, carbs: 13.3, fat: 0.3, fiber: 1.8, sugar: 10.6, sodium: 2, portion: 100, aliases: ['tangerina']),
+  _f('pera', 'Pera', _fruit, kcal: 57, protein: 0.4, carbs: 15, fat: 0.1, fiber: 3.1, sugar: 9.8, sodium: 1, portion: 160, aliases: ['pear']),
+  _f('sandia', 'Sandía', _fruit, kcal: 30, protein: 0.6, carbs: 7.6, fat: 0.2, fiber: 0.4, sugar: 6.2, sodium: 1, portion: 250, aliases: ['patilla', 'watermelon']),
+  _f('melon', 'Melón', _fruit, kcal: 34, protein: 0.8, carbs: 8.2, fat: 0.2, fiber: 0.9, sugar: 7.9, sodium: 16, portion: 200, aliases: ['melon']),
+  _f('durazno', 'Durazno', _fruit, kcal: 39, protein: 0.9, carbs: 9.5, fat: 0.3, fiber: 1.5, sugar: 8.4, portion: 150, aliases: ['melocoton', 'peach']),
+  _f('limon', 'Limón', _fruit, kcal: 29, protein: 1.1, carbs: 9.3, fat: 0.3, fiber: 2.8, sugar: 2.5, sodium: 2, portion: 30, aliases: ['lima', 'lemon']),
+  _f('beterraga', 'Beterraga', _veg, kcal: 43, protein: 1.6, carbs: 9.6, fat: 0.2, fiber: 2.8, sugar: 6.8, sodium: 78, portion: 80, aliases: ['remolacha', 'betarraga', 'beet']),
+  _f('caigua', 'Caigua', _veg, kcal: 17, protein: 0.6, carbs: 3.9, fat: 0.1, fiber: 1.2, sugar: 1.5, sodium: 2, portion: 100, aliases: ['caigua rellena']),
+  _f('olluco', 'Olluco', FoodCategory.tuber, kcal: 62, protein: 1.1, carbs: 14, fat: 0.1, fiber: 0.9, sugar: 1, sodium: 5, portion: 100, aliases: ['ulluco', 'papa lisa']),
+  _f('platano_sancochado', 'Plátano de isla sancochado', FoodCategory.tuber, kcal: 116, protein: 0.8, carbs: 31, fat: 0.2, fiber: 2.3, sugar: 14, sodium: 5, portion: 150, aliases: ['platano verde', 'platano de isla', 'platano maduro', 'tacacho']),
+  _f('habas', 'Habas', FoodCategory.legume, kcal: 88, protein: 7.6, carbs: 15, fat: 0.4, fiber: 5.4, sugar: 1.8, sodium: 5, portion: 100, aliases: ['haba', 'fava beans']),
+  _f('arvejas', 'Arvejas', FoodCategory.legume, kcal: 84, protein: 5.4, carbs: 15.6, fat: 0.2, fiber: 5.5, sugar: 5.9, sodium: 3, portion: 80, aliases: ['guisantes', 'chicharos', 'peas']),
+  _f('mote', 'Mote', FoodCategory.wholeGrain, kcal: 110, protein: 2.5, carbs: 22, fat: 1.2, fiber: 3, sugar: 0.5, sodium: 10, portion: 100, aliases: ['maiz mote', 'mote de maiz']),
+  _f('cancha', 'Cancha serrana', FoodCategory.snack, kcal: 430, protein: 9, carbs: 70, fat: 14, satFat: 2, fiber: 7, sugar: 1, sodium: 400, portion: 30, nova: 3, aliases: ['cancha', 'maiz tostado']),
+  _f('chifles', 'Chifles', FoodCategory.snack, kcal: 520, protein: 2, carbs: 58, fat: 31, satFat: 9, fiber: 4, sugar: 3, sodium: 400, portion: 40, nova: 3, aliases: ['platano frito', 'chips de platano']),
+
+  // Más proteínas y lácteos
+  _f('pavo', 'Pavo', FoodCategory.leanProtein, kcal: 150, protein: 29, fat: 3, satFat: 1, sodium: 70, portion: 120, aliases: ['pechuga de pavo', 'turkey']),
+  _f('higado', 'Hígado de res', FoodCategory.redMeat, kcal: 175, protein: 27, carbs: 5, fat: 5, satFat: 1.9, sodium: 80, portion: 100, aliases: ['higado', 'higado encebollado', 'liver']),
+  _f('sangrecita', 'Sangrecita', FoodCategory.leanProtein, kcal: 180, protein: 18, carbs: 5, fat: 10, satFat: 2.5, fiber: 0.5, sodium: 300, portion: 120, nova: 3, aliases: ['sangrecita de pollo']),
+  _f('trucha', 'Trucha', FoodCategory.fish, kcal: 140, protein: 20, fat: 6.2, satFat: 1.1, sodium: 50, portion: 150, aliases: ['trucha frita', 'trout']),
+  _f('caballa', 'Caballa / jurel', FoodCategory.fish, kcal: 160, protein: 19, fat: 9, satFat: 2.5, sodium: 90, portion: 150, aliases: ['caballa', 'jurel', 'anchoveta', 'sardina', 'mackerel']),
+  _f('chorizo', 'Chorizo', FoodCategory.processedMeat, kcal: 450, protein: 24, carbs: 2, fat: 38, satFat: 14, sodium: 1200, portion: 50, nova: 4, aliases: ['chorizo parrillero', 'longaniza']),
+  _f('leche_evaporada', 'Leche evaporada', FoodCategory.dairy, kcal: 135, protein: 6.8, carbs: 10, fat: 7.6, satFat: 4.6, sugar: 10, sodium: 106, portion: 30, nova: 3, aliases: ['leche de tarro', 'gloria', 'leche en lata']),
+
+  // Bebidas y postres peruanos
+  _f('cafe_leche', 'Café con leche', FoodCategory.dairy, kcal: 45, protein: 2, carbs: 5, fat: 1.8, satFat: 1.1, sugar: 5, sodium: 30, portion: 250, aliases: ['cafe con leche', 'latte']),
+  _f('emoliente', 'Emoliente', FoodCategory.sugaryDrink, kcal: 40, carbs: 10, sugar: 9, sodium: 5, portion: 250, nova: 3, aliases: []),
+  _f('limonada', 'Limonada', FoodCategory.sugaryDrink, kcal: 40, carbs: 10.5, sugar: 10, sodium: 1, portion: 250, nova: 3, aliases: ['limonada frozen', 'agua de limon']),
+  _f('quinua_bebida', 'Quinua con manzana (bebida)', FoodCategory.sugaryDrink, kcal: 60, protein: 1.2, carbs: 13, fat: 0.4, fiber: 0.8, sugar: 9, sodium: 5, portion: 250, nova: 3, aliases: ['quaker', 'avena con manzana', 'bebida de quinua']),
+  _f('mazamorra', 'Mazamorra morada', FoodCategory.sweets, kcal: 95, protein: 0.3, carbs: 23, fat: 0.1, fiber: 0.6, sugar: 16, sodium: 10, portion: 200, nova: 3, aliases: ['mazamorra', 'clasico']),
+  _f('arroz_leche', 'Arroz con leche', FoodCategory.sweets, kcal: 140, protein: 3.3, carbs: 25, fat: 3, satFat: 1.8, fiber: 0.2, sugar: 14, sodium: 45, portion: 200, nova: 3, aliases: []),
+  _f('picarones', 'Picarones', FoodCategory.sweets, kcal: 320, protein: 4, carbs: 45, fat: 14, satFat: 2.5, fiber: 1.5, sugar: 22, sodium: 120, portion: 120, nova: 3, aliases: ['picaron']),
+  _f('alfajor', 'Alfajor', FoodCategory.sweets, kcal: 430, protein: 5, carbs: 65, fat: 17, satFat: 9, fiber: 1, sugar: 38, sodium: 150, portion: 40, nova: 4, aliases: ['alfajores', 'king kong']),
 ];

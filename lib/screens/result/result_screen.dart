@@ -12,6 +12,7 @@ import '../../providers/meals_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/common.dart';
 import '../../widgets/nutrition_widgets.dart';
+import '../assistant/assistant_screen.dart';
 import '../navigation.dart';
 
 /// Resultado nutricional de una comida nueva o guardada.
@@ -141,6 +142,19 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                   ),
               ],
             ),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => AppNavigation.push(
+              context,
+              AssistantScreen(
+                initialQuestion: 'Mi comida fue: ${meal.foods.map((item) => '${item.food.name} '
+                    '(${item.grams.round()} g)').join(', ')}. El semáforo salió ${assessment.trafficLight.label}. '
+                    '¿Qué le puedo agregar o cambiar para que sea más equilibrada, con alimentos fáciles de conseguir en Perú?',
+              ),
+            ),
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: const Text('Pedir ideas a Nutri (IA)'),
           ),
           const SizedBox(height: 16),
           Text(

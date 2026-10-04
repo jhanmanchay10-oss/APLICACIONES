@@ -27,6 +27,8 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
   List<FoodItem>? _onlineResults;
   bool _searchingOnline = false;
   String? _onlineError;
+  bool _estimating = false;
+  String? _estimateError;
 
   @override
   void dispose() {
@@ -46,6 +48,30 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
       if (mounted) setState(() => _onlineError = friendlyError(error));
     } finally {
       if (mounted) setState(() => _searchingOnline = false);
+    }
+  }
+
+  /// Calcula con IA lo que escribió el usuario (ej. "2 huevos cocidos").
+  Future<void> _estimateWithAi() async {
+    setState(() {
+      _estimating = true;
+      _estimateError = null;
+    });
+    try {
+      final result = await ref.read(foodRecognitionServiceProvider).estimateFromText(_query);
+      if (!mounted) return;
+      if (widget.pickMode) {
+        Navigator.pop(context, result.foods.first.food);
+        return;
+      }
+      await AppNavigation.push(
+        context,
+        MealEditorScreen(initialFoods: result.foods, source: MealSource.search, lowConfidence: result.isLowConfidence),
+      );
+    } catch (error) {
+      if (mounted) setState(() => _estimateError = friendlyError(error));
+    } finally {
+      if (mounted) setState(() => _estimating = false);
     }
   }
 
@@ -71,6 +97,7 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
   Widget build(BuildContext context) {
     final local = ref.watch(localFoodDatabaseProvider).search(_query);
     final online = _onlineResults;
+    final aiEnabled = ref.watch(foodRecognitionServiceProvider).enabled;
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.pickMode ? 'Agregar alimento' : 'Buscar alimento')),
@@ -85,7 +112,7 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
                 maxLength: 60,
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
-                  hintText: 'Ej. arroz, manzana, yogur…',
+                  hintText: 'Ej. 2 huevos cocidos, lomo saltado…',
                   prefixIcon: const Icon(Icons.search),
                   counterText: '',
                   suffixIcon: _query.isEmpty
@@ -106,6 +133,7 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
                   _query = value.trim();
                   _onlineResults = null;
                   _onlineError = null;
+                  _estimateError = null;
                 }),
                 onSubmitted: (_) {
                   if (_query.length >= 2) _searchOnline();
@@ -118,10 +146,20 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
                 children: [
                   SectionHeader(_query.isEmpty ? 'Alimentos frecuentes' : 'Alimentos'),
                   if (local.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: Text('No encontramos ese alimento en la lista. Prueba buscar en productos envasados.'),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(aiEnabled
+                          ? 'No está en la lista local. Calcúlalo con IA o busca en productos envasados.'
+                          : 'No encontramos ese alimento en la lista. Prueba buscar en productos envasados.'),
                     ),
+                  if (aiEnabled && _query.length >= 2) ...[
+                    _AiEstimateCard(query: _query, loading: _estimating, onTap: _estimateWithAi),
+                    if (_estimateError != null) ...[
+                      const SizedBox(height: 8),
+                      InfoBanner(message: _estimateError!, tone: BannerTone.warning),
+                    ],
+                    const SizedBox(height: 12),
+                  ],
                   for (final food in local) _FoodResult(food: food, onTap: () => _select(food)),
                   if (_query.length >= 2) ...[
                     const SizedBox(height: 12),
@@ -174,6 +212,37 @@ class _FoodResult extends StatelessWidget {
           title: Text(food.name, maxLines: 2, overflow: TextOverflow.ellipsis),
           subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: const Icon(Icons.add_circle_outline),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiEstimateCard extends StatelessWidget {
+  const _AiEstimateCard({required this.query, required this.loading, required this.onTap});
+
+  final String query;
+  final bool loading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      color: scheme.primaryContainer,
+      child: ListTile(
+        onTap: loading ? null : onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        leading: loading
+            ? const SizedBox.square(dimension: 24, child: CircularProgressIndicator(strokeWidth: 2))
+            : Icon(Icons.auto_awesome, color: scheme.onPrimaryContainer),
+        title: Text(
+          loading ? 'Calculando con IA…' : 'Calcular "$query" con IA',
+          style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          'Reconoce cualquier alimento o plato. Puedes escribir cantidades.',
+          style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.8)),
         ),
       ),
     );

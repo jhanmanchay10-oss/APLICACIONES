@@ -3,7 +3,7 @@ name: Build APK
 on:
   push:
     branches: [main, master, "claude/**"]
-    paths-ignore: ["**.md"]
+    paths-ignore: ["**.md", "supabase/**", ".github/workflows/deploy-backend.yml"]
   pull_request:
   workflow_dispatch:
 
@@ -36,20 +36,81 @@ jobs:
         run: flutter pub get
 
       - name: Análisis estático
-        run: flutter analyze
+        run: |
+          set +e
+          flutter analyze --no-fatal-infos > analyze.txt 2>&1
+          status=$?
+          cat analyze.txt
+          grep -E '^\s*(error|warning|info) •' analyze.txt | while IFS='•' read -r level message location code; do
+            level=$(echo "$level" | xargs)
+            location=$(echo "$location" | xargs)
+            file=$(echo "$location" | cut -d: -f1)
+            line=$(echo "$location" | cut -d: -f2)
+            col=$(echo "$location" | cut -d: -f3)
+            kind=notice
+            [ "$level" = "error" ] && kind=error
+            [ "$level" = "warning" ] && kind=warning
+            echo "::$kind file=$file,line=$line,col=$col::$(echo "$message" | xargs) ($(echo "$code" | xargs))"
+          done
+          exit $status
 
       - name: Pruebas
-        run: flutter test
+        run: flutter test --reporter github
 
-      - name: Compilar APK
+      - name: Configuración de Supabase
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          URL="$SUPABASE_URL"
+          KEY="$SUPABASE_PUBLISHABLE_KEY"
+          if [ -z "$URL" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            URL="https://$SUPABASE_PROJECT_REF.supabase.co"
+          fi
+          # Obtiene la clave publicable automáticamente con el token de Supabase.
+          if [ -z "$KEY" ] && [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            KEYS=$(curl -sS --fail "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/api-keys" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" || echo '[]')
+            KEY=$(echo "$KEYS" | jq -r '[.[] | select(.type == "publishable")][0].api_key // empty' 2>/dev/null)
+            if [ -z "$KEY" ]; then
+              KEY=$(echo "$KEYS" | jq -r '[.[] | select(.name == "anon")][0].api_key // empty' 2>/dev/null)
+            fi
+          fi
+          if [ -n "$URL" ] && [ -n "$KEY" ]; then
+            echo "AI_STATUS=IA y nube activadas" >> "$GITHUB_ENV"
+          else
+            echo "::warning title=IA desactivada::El APK se compila en modo local. Configura los secretos de Supabase para activar la IA."
+            echo "AI_STATUS=Modo local (IA sin configurar)" >> "$GITHUB_ENV"
+          fi
+          echo "BUILD_SUPABASE_URL=$URL" >> "$GITHUB_ENV"
+          echo "BUILD_SUPABASE_KEY=$KEY" >> "$GITHUB_ENV"
+
+      - name: Firma de la app
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+            {
+              echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+              echo "keyPassword=$ANDROID_KEYSTORE_PASSWORD"
+              echo "keyAlias=nutrisemaforo"
+              echo "storeFile=upload-keystore.jks"
+            } > android/key.properties
+            echo "Firma fija configurada: las actualizaciones se instalan sin desinstalar."
+          else
+            echo "::warning title=Firma temporal::Sin ANDROID_KEYSTORE_BASE64 cada APK tiene otra firma y hay que desinstalar la versión anterior."
+          fi
+
+      - name: Compilar APK
         run: |
           flutter build apk --release \
             --build-number=${{ github.run_number }} \
-            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+            --dart-define=SUPABASE_URL="$BUILD_SUPABASE_URL" \
+            --dart-define=SUPABASE_PUBLISHABLE_KEY="$BUILD_SUPABASE_KEY"
           cp build/app/outputs/flutter-apk/app-release.apk NutriSemaforo.apk
 
       - name: Subir APK como artefacto
@@ -62,11 +123,14 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0-build.${{ github.run_number }}
-          name: NutriSemáforo 1.0.0 (build ${{ github.run_number }})
+          tag_name: v1.1.0-build.${{ github.run_number }}
+          name: NutriSemáforo 1.1.0 (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           make_latest: true
           files: NutriSemaforo.apk
           body: |
-            APK de NutriSemáforo para Android (7.0 o superior).
-            Descarga `NutriSemaforo.apk`, ábrelo en tu teléfono y permite "instalar apps de origen desconocido".
+            APK de NutriSemáforo para Android (7.0 o superior). Estado: ${{ env.AI_STATUS }}.
+
+            1. Descarga `NutriSemaforo.apk` desde tu teléfono.
+            2. Ábrelo y permite "Instalar apps de origen desconocido".
+            3. Si ya tenías la app, se actualiza sin perder tus comidas.

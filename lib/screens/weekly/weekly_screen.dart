@@ -13,6 +13,8 @@ import '../../providers/core_providers.dart';
 import '../../providers/meals_provider.dart';
 import '../../widgets/common.dart';
 import '../../widgets/traffic_light_indicator.dart';
+import '../navigation.dart';
+import '../recommendations/recommendations_screen.dart';
 import '../shell/app_shell.dart';
 
 class WeeklyScreen extends ConsumerWidget {
@@ -67,9 +69,15 @@ class WeeklyScreen extends ConsumerWidget {
             _TrendsCard(summary: data, goals: ref.watch(nutritionCriteriaProvider)),
             const SizedBox(height: 16),
             FilledButton.tonalIcon(
-              onPressed: () => ref.read(tabIndexProvider.notifier).select(AppTab.recommendations),
+              onPressed: () => AppNavigation.push(context, const RecommendationsScreen()),
               icon: const Icon(Icons.lightbulb_outline),
               label: const Text('¿Qué puedo mejorar?'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => ref.read(tabIndexProvider.notifier).select(AppTab.assistant),
+              icon: const Icon(Icons.auto_awesome_outlined),
+              label: const Text('Analizar mi semana con Nutri (IA)'),
             ),
           ],
         ),

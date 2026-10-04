@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -85,7 +86,10 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
       _openEditor(
         result.foods,
         lowConfidence: result.isLowConfidence,
-        notice: result.foods.isEmpty ? 'No pudimos identificar correctamente los alimentos. Agrégalos manualmente.' : null,
+        name: result.dishName,
+        notice: result.foods.isEmpty
+            ? 'No pudimos identificar correctamente los alimentos. Agrégalos manualmente.'
+            : result.notes,
       );
     } catch (error) {
       if (mounted) setState(() => _error = friendlyError(error));
@@ -94,11 +98,12 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
     }
   }
 
-  void _openEditor(List<MealFood> foods, {bool lowConfidence = false, String? notice}) {
+  void _openEditor(List<MealFood> foods, {bool lowConfidence = false, String? notice, String? name}) {
     AppNavigation.push(
       context,
       MealEditorScreen(
         initialFoods: foods,
+        initialName: name,
         photo: _image,
         source: MealSource.photo,
         lowConfidence: lowConfidence,
@@ -117,7 +122,7 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
       appBar: AppBar(title: const Text('Analizar plato')),
       body: SafeArea(
         child: _analyzing
-            ? const LoadingView(message: 'Analizando tu plato...')
+            ? _AnalyzingView(image: image)
             : ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
@@ -139,6 +144,13 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
                     const InfoBanner(
                       message: 'Modo manual: guarda la foto y agrega tú los alimentos. '
                           'El análisis con IA se activa al configurar el servidor.',
+                    ),
+                    const SizedBox(height: 12),
+                  ] else if (image == null) ...[
+                    const InfoBanner(
+                      icon: Icons.auto_awesome,
+                      message: 'La IA reconoce cada alimento del plato (incluida la comida peruana), '
+                          'estima las porciones y luego tú puedes corregir lo que haga falta.',
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -211,6 +223,86 @@ class _Placeholder extends StatelessWidget {
             Icon(Icons.add_a_photo_outlined, size: 56, color: scheme.primary),
             const SizedBox(height: 12),
             Text('Toca para tomar una foto', style: Theme.of(context).textTheme.titleMedium),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pantalla de carga con la foto y mensajes que explican lo que hace la IA.
+class _AnalyzingView extends StatefulWidget {
+  const _AnalyzingView({required this.image});
+
+  final File? image;
+
+  @override
+  State<_AnalyzingView> createState() => _AnalyzingViewState();
+}
+
+class _AnalyzingViewState extends State<_AnalyzingView> {
+  static const _steps = [
+    'Analizando tu plato…',
+    'Identificando cada alimento…',
+    'Estimando las porciones…',
+    'Calculando los nutrientes…',
+  ];
+
+  late final Timer _timer;
+  int _step = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
+      if (mounted) setState(() => _step = (_step + 1) % _steps.length);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final image = widget.image;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox.square(
+                  dimension: 196,
+                  child: CircularProgressIndicator(strokeWidth: 5, color: theme.colorScheme.primary),
+                ),
+                if (image != null)
+                  ClipOval(child: Image.file(image, width: 176, height: 176, fit: BoxFit.cover))
+                else
+                  Icon(Icons.auto_awesome, size: 64, color: theme.colorScheme.primary),
+              ],
+            ),
+            const SizedBox(height: 28),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 350),
+              child: Text(
+                _steps[_step],
+                key: ValueKey(_step),
+                style: theme.textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Esto puede tardar unos segundos.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
           ],
         ),
       ),

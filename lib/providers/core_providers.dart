@@ -5,7 +5,11 @@ import '../core/config/env.dart';
 import '../core/config/nutrition_criteria.dart';
 import '../data/local_food_database.dart';
 import '../repositories/meal_repository.dart';
+import '../repositories/product_repository.dart';
+import '../services/ai/ai_client.dart';
+import '../services/ai/assistant_service.dart';
 import '../services/ai/food_recognition_service.dart';
+import '../services/ai/label_reader_service.dart';
 import '../services/barcode/open_food_facts_service.dart';
 import '../services/nutrition/recommendation_engine.dart';
 import '../services/nutrition/traffic_light_service.dart';
@@ -35,8 +39,22 @@ final localFoodDatabaseProvider = Provider<LocalFoodDatabase>((ref) => const Loc
 
 final openFoodFactsServiceProvider = Provider<OpenFoodFactsService>((ref) => OpenFoodFactsService());
 
+final aiClientProvider = Provider<AiClient>((ref) => const AiClient(enabled: Env.isSupabaseConfigured));
+
 final foodRecognitionServiceProvider = Provider<FoodRecognitionService>(
-  (ref) => FoodRecognitionService(enabled: Env.isSupabaseConfigured, database: ref.watch(localFoodDatabaseProvider)),
+  (ref) => FoodRecognitionService(
+    enabled: Env.isSupabaseConfigured,
+    database: ref.watch(localFoodDatabaseProvider),
+    client: ref.watch(aiClientProvider),
+  ),
+);
+
+final labelReaderServiceProvider = Provider<LabelReaderService>((ref) => LabelReaderService(ref.watch(aiClientProvider)));
+
+final assistantServiceProvider = Provider<AssistantService>((ref) => AssistantService(ref.watch(aiClientProvider)));
+
+final productRepositoryProvider = Provider<ProductRepository>(
+  (ref) => ProductRepository(ref.watch(sharedPreferencesProvider), ref.watch(openFoodFactsServiceProvider)),
 );
 
 final photoStorageProvider = Provider<PhotoStorage>((ref) => const PhotoStorage());

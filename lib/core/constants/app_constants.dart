@@ -1,7 +1,7 @@
 abstract final class AppConstants {
   static const appName = 'NutriSemáforo';
   static const slogan = 'Conoce lo que comes. Mejora tus hábitos.';
-  static const version = '1.0.0';
+  static const version = '1.1.0';
 
   static const openFoodFactsBaseUrl = 'https://world.openfoodfacts.org';
 

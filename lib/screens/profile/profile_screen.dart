@@ -191,12 +191,23 @@ class ProfileScreen extends ConsumerWidget {
                     subtitle: Text('Tus datos se guardan solo en este dispositivo. '
                         'La cuenta en la nube se activa cuando se configura el servidor.'),
                   )
-                : user == null
-                    ? ListTile(
-                        leading: const Icon(Icons.login),
-                        title: const Text('Iniciar sesión'),
-                        subtitle: const Text('Respalda tus comidas y usa el análisis con IA'),
-                        onTap: () => AppNavigation.push(context, const AuthScreen()),
+                : user == null || user.isAnonymous
+                    ? Column(
+                        children: [
+                          if (user != null)
+                            const ListTile(
+                              leading: Icon(Icons.auto_awesome_outlined),
+                              title: Text('Usando la app como invitado'),
+                              subtitle: Text('La IA funciona sin cuenta. Crea una cuenta para respaldar '
+                                  'tus comidas y usarlas en otro teléfono.'),
+                            ),
+                          ListTile(
+                            leading: const Icon(Icons.login),
+                            title: const Text('Iniciar sesión o crear cuenta'),
+                            subtitle: const Text('Respalda tus comidas en la nube'),
+                            onTap: () => AppNavigation.push(context, const AuthScreen()),
+                          ),
+                        ],
                       )
                     : Column(
                         children: [

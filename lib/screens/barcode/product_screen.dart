@@ -7,6 +7,7 @@ import '../../providers/core_providers.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/common.dart';
 import '../../widgets/nutrition_widgets.dart';
+import '../assistant/assistant_screen.dart';
 import '../navigation.dart';
 import '../result/meal_editor_screen.dart';
 
@@ -15,6 +16,13 @@ class ProductScreen extends ConsumerWidget {
   const ProductScreen({super.key, required this.product});
 
   final FoodItem product;
+
+  static const _octagonLabels = {
+    'high_sugar': 'ALTO EN AZÚCAR',
+    'high_sodium': 'ALTO EN SODIO',
+    'high_saturated_fat': 'ALTO EN GRASAS SATURADAS',
+    'contains_trans_fat': 'CONTIENE GRASAS TRANS',
+  };
 
   static const _novaLabels = {
     1: 'Sin procesar o mínimamente procesado',
@@ -85,6 +93,24 @@ class ProductScreen extends ConsumerWidget {
               ),
             ],
           ),
+          if (product.warnings.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final warning in product.warnings)
+                  if (_octagonLabels[warning] != null) _Octagon(label: _octagonLabels[warning]!),
+              ],
+            ),
+          ],
+          if (product.source == FoodSource.ai) ...[
+            const SizedBox(height: 16),
+            const InfoBanner(
+              icon: Icons.auto_awesome,
+              message: 'Datos leídos de la etiqueta con IA. Verifica que coincidan con el envase.',
+            ),
+          ],
           const SizedBox(height: 20),
           AssessmentHeader(assessment: assessment),
           const SizedBox(height: 12),
@@ -130,12 +156,64 @@ class ProductScreen extends ConsumerWidget {
             ),
           ],
           const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => AppNavigation.push(
+              context,
+              AssistantScreen(
+                initialQuestion: '¿Qué opinas de este producto: ${product.name}'
+                    '${product.brand == null ? '' : ' (${product.brand})'}? Por 100 g tiene '
+                    '${product.per100g.sugar.toStringAsFixed(1)} g de azúcares, '
+                    '${product.per100g.sodiumMg.toStringAsFixed(0)} mg de sodio, '
+                    '${product.per100g.saturatedFat.toStringAsFixed(1)} g de grasas saturadas y '
+                    '${product.per100g.fiber.toStringAsFixed(1)} g de fibra. ¿Con qué frecuencia conviene '
+                    'consumirlo y qué alternativa más nutritiva hay en Perú?',
+              ),
+            ),
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: const Text('Preguntar a Nutri sobre este producto'),
+          ),
+          const SizedBox(height: 16),
           Text(
-            'Datos de Open Food Facts, una base colaborativa. Verifica la etiqueta del envase si tienes dudas.',
+            product.source == FoodSource.ai
+                ? 'Valores leídos de la foto de la etiqueta. Verifica el envase si tienes dudas.'
+                : 'Datos de Open Food Facts, una base colaborativa. Verifica la etiqueta del envase si tienes dudas.',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
       ),
     );
   }
+}
+
+/// Octógono de advertencia como en los envases peruanos.
+class _Octagon extends StatelessWidget {
+  const _Octagon({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: 'Advertencia: $label',
+        excludeSemantics: true,
+        child: Container(
+          width: 92,
+          height: 92,
+          padding: const EdgeInsets.all(8),
+          decoration: const ShapeDecoration(
+            color: Colors.black,
+            shape: StarBorder.polygon(
+              sides: 8,
+              rotation: 22.5,
+              pointRounding: 0.1,
+              side: BorderSide(color: Colors.white, width: 2),
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, height: 1.1),
+          ),
+        ),
+      );
 }

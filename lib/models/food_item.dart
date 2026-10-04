@@ -20,6 +20,7 @@ class FoodItem {
     this.imageUrl,
     this.nutriScoreGrade,
     this.source = FoodSource.local,
+    this.warnings = const [],
   });
 
   final String id;
@@ -38,6 +39,10 @@ class FoodItem {
   final String? imageUrl;
   final String? nutriScoreGrade;
   final FoodSource source;
+
+  /// Octógonos de advertencia leídos de la etiqueta (high_sugar, high_sodium,
+  /// high_saturated_fat, contains_trans_fat).
+  final List<String> warnings;
 
   bool get isUltraProcessed => (novaGroup ?? 1) >= 4;
 
@@ -62,6 +67,7 @@ class FoodItem {
         imageUrl: imageUrl,
         nutriScoreGrade: nutriScoreGrade,
         source: source,
+        warnings: warnings,
       );
 
   Map<String, dynamic> toJson() => {
@@ -78,6 +84,7 @@ class FoodItem {
         'image_url': imageUrl,
         'nutriscore_grade': nutriScoreGrade,
         'source': source.name,
+        'warnings': warnings,
       };
 
   factory FoodItem.fromJson(Map<String, dynamic> json) => FoodItem(
@@ -97,5 +104,6 @@ class FoodItem {
           (source) => source.name == json['source'],
           orElse: () => FoodSource.custom,
         ),
+        warnings: (json['warnings'] as List?)?.whereType<String>().toList() ?? const [],
       );
 }

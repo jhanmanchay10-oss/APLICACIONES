@@ -9,6 +9,7 @@ import '../../providers/core_providers.dart';
 import '../../services/barcode/open_food_facts_service.dart';
 import '../../widgets/common.dart';
 import '../navigation.dart';
+import 'label_scan_screen.dart';
 import 'product_screen.dart';
 
 class BarcodeScannerScreen extends ConsumerStatefulWidget {
@@ -42,25 +43,21 @@ class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen> {
     setState(() => _loading = true);
     await _controller.stop();
     try {
-      final product = await ref.read(openFoodFactsServiceProvider).productByBarcode(code);
+      final product = await ref.read(productRepositoryProvider).byBarcode(code);
       if (!mounted) return;
       await AppNavigation.push(context, ProductScreen(product: product));
+    } on NotFoundException {
+      if (!mounted) return;
+      await _showNotFound(code);
     } catch (error) {
       if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Producto no disponible'),
+          title: const Text('Sin conexión'),
           content: Text(friendlyError(error)),
           actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                AppNavigation.searchFood(context);
-              },
-              child: const Text('Buscar manualmente'),
-            ),
-            FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Escanear otro')),
+            FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Entendido')),
           ],
         ),
       );
@@ -69,6 +66,55 @@ class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen> {
         setState(() => _loading = false);
         unawaited(_controller.start());
       }
+    }
+  }
+
+  Future<void> _showNotFound(String code) async {
+    final aiEnabled = ref.read(labelReaderServiceProvider).enabled;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Producto no encontrado', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(
+                aiEnabled
+                    ? 'El código $code aún no está en la base de productos. Fotografía la tabla nutricional '
+                        'y la IA la leerá por ti.'
+                    : 'El código $code aún no está en la base de productos. Puedes buscar el alimento por su nombre.',
+              ),
+              const SizedBox(height: 20),
+              if (aiEnabled) ...[
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(context, 'label'),
+                  icon: const Icon(Icons.document_scanner_outlined),
+                  label: const Text('Leer etiqueta con IA'),
+                ),
+                const SizedBox(height: 10),
+              ],
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context, 'search'),
+                icon: const Icon(Icons.search),
+                label: const Text('Buscar por nombre'),
+              ),
+              const SizedBox(height: 4),
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Escanear otro')),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (choice == 'label') {
+      await AppNavigation.push(context, LabelScanScreen(barcode: code));
+    } else if (choice == 'search') {
+      await AppNavigation.searchFood(context);
     }
   }
 

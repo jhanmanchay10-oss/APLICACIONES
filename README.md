@@ -16,17 +16,37 @@ Cada push a este repositorio compila el APK en GitHub Actions y lo publica en **
 
 | Pantalla | Qué hace |
 |---|---|
-| 🏠 Inicio | Saludo, logo, accesos a Analizar / Escanear / Buscar, resumen de la semana, últimas comidas y consejo del día |
-| 📸 Analizar plato | Cámara o galería, vista previa, análisis con IA (si está configurada) o modo manual |
+| 🏠 Inicio | Saludo, estado del día, botón principal "Analizar plato", accesos rápidos, asistente IA, resumen semanal, últimas comidas y consejo del día |
+| 📸 Analizar plato | Cámara o galería; la IA (GPT) reconoce **cada componente** del plato, incluida la comida peruana, y estima porciones |
 | 🔎 Alimentos detectados | Editar cantidades, cambiar, eliminar (con deshacer) o agregar alimentos; aviso de baja confianza |
-| 🚦 Resultado | Semáforo, "¿Por qué?", "¿Qué puedes mejorar?", nutrientes, gráfico de energía, alimentos |
-| 📦 Escáner | Lector EAN/UPC + consulta en Open Food Facts (ingredientes, NOVA, Nutri-Score) |
+| 🚦 Resultado | Semáforo, "¿Por qué?", "¿Qué puedes mejorar?", nutrientes, gráfico y botón "Pedir ideas a Nutri" |
+| 📦 Escáner | EAN/UPC + Open Food Facts; si el producto no existe, **la IA lee la etiqueta** (tabla nutricional y octógonos). Los productos quedan guardados en el teléfono y funcionan sin internet |
+| 🔍 Buscar | Base local de **~140 alimentos** (incluye platos y frutas peruanas) con búsqueda tolerante a plurales y tildes, productos envasados y "Calcular con IA" para cualquier alimento ("2 huevos cocidos") |
+| ✨ Nutri IA | Asistente de nutrición con respuestas **fundamentadas** (búsqueda limitada a OMS, OPS, FAO, MINSA, INS, NIH, Harvard…) con las fuentes enlazadas y recomendaciones según tu semana |
 | 📅 Historial | Comidas agrupadas por día, con foto, hora, semáforo y filtros por color |
-| 📈 Mi semana | Lunes a domingo con color por día, conteos, gráfico apilado y tendencias vs. semana anterior |
-| 💡 Mejorar | Recomendaciones semanales positivas y explicación transparente de los criterios |
-| 👤 Perfil | Nombre, foto opcional, mostrar/ocultar calorías, tema, cuenta en la nube, privacidad y borrado de datos |
+| 📈 Mi semana | Color por día, conteos, gráfico, tendencias y acceso a "¿Qué puedo mejorar?" |
+| 👤 Perfil | Nombre, foto, calorías visibles u ocultas, tema, cuenta en la nube (opcional), privacidad y borrado de datos |
 
-La app funciona **sin conexión y sin cuenta** (SQLite local). Supabase e IA son opcionales.
+La app funciona **sin conexión y sin cuenta** (SQLite local). La IA usa una sesión de invitado automática: no hace falta registrarse.
+
+## 🤖 Activar la IA (sin usar la terminal)
+
+1. **OpenAI:** crea una clave en platform.openai.com → *API keys* y carga saldo en *Billing*.
+2. **Supabase:** crea un proyecto gratuito en supabase.com. Anota la *contraseña de la base de datos* y la referencia del proyecto (la parte `xxxx` de `https://xxxx.supabase.co`). Crea un token en *Account → Access Tokens*.
+3. **GitHub → Settings → Secrets and variables → Actions → New repository secret**, agrega:
+
+| Secreto | Valor |
+|---|---|
+| `OPENAI_API_KEY` | la clave `sk-...` |
+| `SUPABASE_ACCESS_TOKEN` | el token `sbp_...` |
+| `SUPABASE_PROJECT_REF` | la referencia `xxxx` |
+| `SUPABASE_DB_PASSWORD` | la contraseña de la base de datos |
+| `ANDROID_KEYSTORE_BASE64` y `ANDROID_KEYSTORE_PASSWORD` | firma fija para actualizar la app sin desinstalarla |
+
+4. **Actions → Deploy backend → Run workflow** (crea las tablas, guarda la clave de IA en el servidor, activa la sesión de invitado y publica las funciones).
+5. **Actions → Build APK → Run workflow**: el nuevo APK sale con la IA activada (obtiene la URL y la clave publicable automáticamente).
+
+Funciones de IA (`supabase/functions/`): `analyze-meal` (fotos), `estimate-food` (texto), `read-label` (etiquetas) y `nutrition-assistant` (asistente con fuentes). Todas exigen sesión, validan las entradas y tienen límite de usos por hora. La clave de OpenAI nunca está en la app.
 
 ## 🏗️ Arquitectura
 
@@ -77,7 +97,7 @@ Todos los umbrales están en un único archivo: `lib/core/config/nutrition_crite
 6. **Valores de la base local**, especialmente los platos preparados (promedios estimados).
 7. Adecuación para **niños, embarazo o condiciones de salud** (la app no está pensada para ellos).
 
-## ☁️ Configurar Supabase + IA (opcional)
+## ☁️ Configuración manual con el CLI (alternativa)
 
 1. Crea un proyecto en [supabase.com](https://supabase.com) e instala el [CLI](https://supabase.com/docs/guides/cli).
 2. Aplica el esquema (tablas, RLS y bucket privado `meal-photos`):
@@ -88,7 +108,7 @@ Todos los umbrales están en un único archivo: `lib/core/config/nutrition_crite
 3. Despliega la función de IA con tu clave de OpenAI (GPT) (solo vive en el servidor):
    ```bash
    supabase secrets set OPENAI_API_KEY=sk-...
-   supabase functions deploy analyze-meal
+   supabase functions deploy --use-api
    ```
 4. En GitHub → *Settings → Secrets and variables → Actions*, agrega `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY`. El siguiente build activará cuenta, sincronización y análisis de fotos.
 

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../assistant/assistant_screen.dart';
 import '../history/history_screen.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
-import '../recommendations/recommendations_screen.dart';
 import '../weekly/weekly_screen.dart';
 
 class TabIndexNotifier extends Notifier<int> {
@@ -19,8 +19,8 @@ final tabIndexProvider = NotifierProvider<TabIndexNotifier, int>(TabIndexNotifie
 abstract final class AppTab {
   static const home = 0;
   static const history = 1;
-  static const weekly = 2;
-  static const recommendations = 3;
+  static const assistant = 2;
+  static const weekly = 3;
   static const profile = 4;
 }
 
@@ -30,8 +30,8 @@ class AppShell extends ConsumerWidget {
   static const _pages = [
     HomeScreen(),
     HistoryScreen(),
+    AssistantScreen(),
     WeeklyScreen(),
-    RecommendationsScreen(),
     ProfileScreen(),
   ];
 
@@ -49,16 +49,15 @@ class AppShell extends ConsumerWidget {
           selectedIndex: index,
           onDestinationSelected: ref.read(tabIndexProvider.notifier).select,
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Inicio'),
+            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Inicio'),
             NavigationDestination(
-                icon: Icon(Icons.history_outlined), selectedIcon: Icon(Icons.history), label: 'Historial'),
+                icon: Icon(Icons.history_outlined), selectedIcon: Icon(Icons.history_rounded), label: 'Historial'),
             NavigationDestination(
-                icon: Icon(Icons.calendar_view_week_outlined),
-                selectedIcon: Icon(Icons.calendar_view_week),
-                label: 'Semana'),
+                icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: 'Nutri IA'),
             NavigationDestination(
-                icon: Icon(Icons.lightbulb_outline), selectedIcon: Icon(Icons.lightbulb), label: 'Mejorar'),
-            NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Perfil'),
+                icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights_rounded), label: 'Semana'),
+            NavigationDestination(
+                icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Perfil'),
           ],
         ),
       ),

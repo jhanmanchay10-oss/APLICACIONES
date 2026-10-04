@@ -40,6 +40,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final auth = Supabase.instance.client.auth;
     try {
       if (_register) {
+        // Una sesión de invitado se reemplaza por la cuenta nueva.
+        if (auth.currentUser?.isAnonymous ?? false) await auth.signOut();
         final response = await auth.signUp(email: _email.text.trim(), password: _password.text);
         if (response.session == null) {
           if (!mounted) return;
@@ -84,7 +86,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               const Center(child: NutriLogo(size: 80)),
               const SizedBox(height: 16),
               const Text(
-                'Con una cuenta puedes guardar una copia de tus comidas en la nube y usar el análisis con IA.',
+                'Con una cuenta guardas una copia de tus comidas en la nube y puedes verlas en otro teléfono.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),

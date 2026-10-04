@@ -48,8 +48,8 @@ void main() {
     await pumpApp(tester, {'onboarding_done': true});
     for (final (tab, title) in [
       ('Historial', 'Tu historial está vacío'),
+      ('Nutri IA', 'Asistente no disponible'),
       ('Semana', 'Mi semana'),
-      ('Mejorar', '¿Qué puedes mejorar?'),
       ('Perfil', 'Preferencias'),
     ]) {
       await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)));

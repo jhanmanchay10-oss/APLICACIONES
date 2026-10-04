@@ -1,0 +1,20 @@
+# Configuración mínima del proyecto de Supabase para el CLI.
+project_id = "nutrisemaforo"
+
+[auth]
+# Permite usar la app (y la IA) sin crear cuenta: sesión de invitado.
+enable_anonymous_sign_ins = true
+
+# Las funciones verifican la sesión del usuario por su cuenta (admin.auth.getUser),
+# compatible con las claves JWT nuevas y antiguas de Supabase.
+[functions.analyze-meal]
+verify_jwt = false
+
+[functions.estimate-food]
+verify_jwt = false
+
+[functions.read-label]
+verify_jwt = false
+
+[functions.nutrition-assistant]
+verify_jwt = false

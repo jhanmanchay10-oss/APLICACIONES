@@ -24,9 +24,13 @@ class MealEditorScreen extends ConsumerStatefulWidget {
     this.photo,
     this.lowConfidence = false,
     this.notice,
+    this.initialName,
   });
 
   final List<MealFood> initialFoods;
+
+  /// Nombre sugerido (ej. el plato reconocido por la IA).
+  final String? initialName;
   final MealSource source;
   final File? photo;
   final bool lowConfidence;
@@ -39,7 +43,7 @@ class MealEditorScreen extends ConsumerStatefulWidget {
 class _MealEditorScreenState extends ConsumerState<MealEditorScreen> {
   late final List<MealFood> _foods = [...widget.initialFoods];
   late MealType _mealType = MealType.suggestedFor(DateTime.now());
-  final _nameController = TextEditingController();
+  late final _nameController = TextEditingController(text: widget.initialName ?? '');
 
   bool get _fromPhoto => widget.source == MealSource.photo;
 
