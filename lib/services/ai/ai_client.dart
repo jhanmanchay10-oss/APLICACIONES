@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/config/env.dart';
 import '../../core/errors/app_exception.dart';
 
 /// Cliente común para las funciones de IA del servidor (Supabase Edge Functions).
