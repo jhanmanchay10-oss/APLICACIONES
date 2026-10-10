@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Genera las láminas PDF, la tabla de componentes y el resumen de control a partir de
-geometria_refugio.py (la misma geometría que se envió a SketchUp).
+geometria_refugio_v02.py (la misma geometría que se envió a SketchUp).
 Uso: python3 generar_planos.py <carpeta_salida>"""
 import math, os, sys, json, collections
 from reportlab.lib.pagesizes import A3, landscape
@@ -13,7 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "entregables")
 os.makedirs(OUT, exist_ok=True)
 G = {"math": math}
-exec(open(os.path.join(HERE, "geometria_refugio.py"), encoding="utf-8").read(), G)
+exec(open(os.path.join(HERE, "geometria_refugio_v02.py"), encoding="utf-8").read(), G)
 P, INFO = G["build"]()
 
 pdfmetrics.registerFont(TTFont("DV", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
@@ -31,7 +31,7 @@ def sheet_frame(c, code, title, scale_txt, note=None):
     c.rect(10*MM, 10*MM, W-20*MM, H-20*MM)
     bx = W - 10*MM - 150*MM
     c.rect(bx, 10*MM, 150*MM, 32*MM)
-    c.setFont("DVB", 11); c.drawString(bx + 4*MM, 34*MM, "REFUGIO COSTERO DE CAÑA — PROPUESTA CONSTRUCTIVA V01")
+    c.setFont("DVB", 11); c.drawString(bx + 4*MM, 34*MM, "REFUGIO COSTERO DE CAÑA — PROPUESTA CONSTRUCTIVA V02")
     c.setFont("DV", 9); c.drawString(bx + 4*MM, 28*MM, title)
     c.drawString(bx + 4*MM, 22*MM, "Escala: " + scale_txt + "   ·   Unidades: metros   ·   NPT +0.90 (datum ±0.00)")
     c.setFont("DV", 7.5)
@@ -168,55 +168,61 @@ sel = lambda *grs: [p for p in P if p[1] in grs]
 G04, G03, G02 = G["G04"], G["G03"], G["G02"]
 ALLSTRUCT = [G["G02"], G["G03"], G["G04"], G["G05"], G["G06"], G["G07"], G["G08"], G["G09"]]
 
-pdf_path = os.path.join(OUT, "REFUGIO_CAÑA_V01_LAMINAS.pdf")
+pdf_path = os.path.join(OUT, "REFUGIO_CAÑA_V02_LAMINAS.pdf")
 c = canvas.Canvas(pdf_path, pagesize=(W, H))
-c.setTitle("Refugio costero de caña - Propuesta constructiva V01")
+c.setTitle("Refugio costero de caña - Propuesta constructiva V02")
 
-# ===== L-01 perspectiva (como la foto) =====
-sheet_frame(c, "L-01", "Vista principal de referencia (perspectiva desde el lado cercano, como la fotografía)", "sin escala")
-CAM01 = json.loads(os.environ.get("CAM01", "[[1.0,-11.5,1.65],[7.8,1.8,1.7],46]"))
-cam = Persp(tuple(CAM01[0]), tuple(CAM01[1]), CAM01[2], (W/2 - 30*MM, H/2 + 20*MM), 120*MM)
-# cielo y mar
-c.setFillColorRGB(0.80, 0.89, 0.97); c.rect(12*MM, 12*MM, W-24*MM, H-24*MM, fill=1, stroke=0)
-hz = cam.p((60.0, 1.0, -3.3))[1]
-c.setFillColorRGB(0.33, 0.55, 0.72); c.rect(12*MM, 12*MM, W-24*MM, hz-12*MM, fill=1, stroke=0)
-# terreno como triángulos
-xs, ys = G["terrain_grid"](step=0.75)
-tris = []
-for j in range(len(ys)-1):
-    for i in range(len(xs)-1):
-        q = [(xs[i], ys[j]), (xs[i+1], ys[j]), (xs[i+1], ys[j+1]), (xs[i], ys[j+1])]
-        q3 = [(a, b, terrain(a, b)) for a, b in q]
-        for t in ((q3[0], q3[1], q3[2]), (q3[0], q3[2], q3[3])):
-            mid = tuple(sum(v[k] for v in t)/3 for k in range(3))
-            if cam.cam(mid)[2] < 0.5: continue
-            n = ((t[1][1]-t[0][1])*(t[2][2]-t[0][2]) - (t[1][2]-t[0][2])*(t[2][1]-t[0][1]),
-                 (t[1][2]-t[0][2])*(t[2][0]-t[0][0]) - (t[1][0]-t[0][0])*(t[2][2]-t[0][2]),
-                 (t[1][0]-t[0][0])*(t[2][1]-t[0][1]) - (t[1][1]-t[0][1])*(t[2][0]-t[0][0]))
-            Ln = math.sqrt(sum(v*v for v in n)) or 1
-            lit = 0.75 + 0.25*max(0, (n[0]*0.4 - n[1]*0.3 + n[2]*0.85)/Ln)
-            tris.append((cam.d(mid), t, lit))
-tris.sort(key=lambda t: t[0])
-for _, t, lit in tris:
-    pp = [cam.p(v) for v in t]
-    path = c.beginPath(); path.moveTo(*pp[0]); path.lineTo(*pp[1]); path.lineTo(*pp[2]); path.close()
-    c.setFillColorRGB(0.84*lit, 0.76*lit, 0.60*lit); c.setStrokeColorRGB(0.84*lit, 0.76*lit, 0.60*lit); c.setLineWidth(0.2)
-    c.drawPath(path, fill=1, stroke=1)
-def above_ground(pr):
-    if pr[1] == G["G02"]: return None
-    if pr[0] == "box" and pr[2] == "Pedestales":
-        o, ex, ey, ez = pr[4], pr[5], pr[6], pr[7]
-        zt = terrain(o[0] + ex[0]/2, o[1] + ey[1]/2) - 0.02
-        top = o[2] + ez[2]
-        return ("box", pr[1], pr[2], pr[3], (o[0], o[1], zt), ex, ey, (0, 0, top - zt), pr[8])
-    return pr
-vis = [above_ground(p) for p in P if p[1] not in (G["G00"], G["G12"], G["G13"]) and cam.cam(p[4])[2] > 0.3]
-vis = [p for p in vis if p is not None]
-draw_prims(c, cam, vis, outline=0.2)
-c.setFillColor(white); c.rect(12*MM, H-30*MM, 140*MM, 16*MM, fill=1, stroke=0)
-nice(c, 16*MM, H-20*MM, "Escena 01 — Vista principal de referencia", 12, True)
-nice(c, 16*MM, H-26*MM, "Reproducción de la cámara de la escena 01 del archivo .skp (generada desde la geometría del modelo).", 7.5)
-c.showPage()
+# ===== L-01 / L-01B perspectivas =====
+def render_persp(code, title, head, camdef):
+    sheet_frame(c, code, title, "sin escala")
+    cam = Persp(tuple(camdef[0]), tuple(camdef[1]), camdef[2], (W/2 - 30*MM, H/2 + 20*MM), 120*MM)
+    # cielo y mar
+    c.setFillColorRGB(0.80, 0.89, 0.97); c.rect(12*MM, 12*MM, W-24*MM, H-24*MM, fill=1, stroke=0)
+    hz = cam.p((60.0, 1.0, -3.3))[1]
+    c.setFillColorRGB(0.33, 0.55, 0.72); c.rect(12*MM, 12*MM, W-24*MM, hz-12*MM, fill=1, stroke=0)
+    # terreno como triángulos
+    xs, ys = G["terrain_grid"](step=0.75)
+    tris = []
+    for j in range(len(ys)-1):
+        for i in range(len(xs)-1):
+            q = [(xs[i], ys[j]), (xs[i+1], ys[j]), (xs[i+1], ys[j+1]), (xs[i], ys[j+1])]
+            q3 = [(a, b, terrain(a, b)) for a, b in q]
+            for t in ((q3[0], q3[1], q3[2]), (q3[0], q3[2], q3[3])):
+                mid = tuple(sum(v[k] for v in t)/3 for k in range(3))
+                if cam.cam(mid)[2] < 0.5: continue
+                n = ((t[1][1]-t[0][1])*(t[2][2]-t[0][2]) - (t[1][2]-t[0][2])*(t[2][1]-t[0][1]),
+                     (t[1][2]-t[0][2])*(t[2][0]-t[0][0]) - (t[1][0]-t[0][0])*(t[2][2]-t[0][2]),
+                     (t[1][0]-t[0][0])*(t[2][1]-t[0][1]) - (t[1][1]-t[0][1])*(t[2][0]-t[0][0]))
+                Ln = math.sqrt(sum(v*v for v in n)) or 1
+                lit = 0.75 + 0.25*max(0, (n[0]*0.4 - n[1]*0.3 + n[2]*0.85)/Ln)
+                tris.append((cam.d(mid), t, lit))
+    tris.sort(key=lambda t: t[0])
+    for _, t, lit in tris:
+        pp = [cam.p(v) for v in t]
+        path = c.beginPath(); path.moveTo(*pp[0]); path.lineTo(*pp[1]); path.lineTo(*pp[2]); path.close()
+        c.setFillColorRGB(0.84*lit, 0.76*lit, 0.60*lit); c.setStrokeColorRGB(0.84*lit, 0.76*lit, 0.60*lit); c.setLineWidth(0.2)
+        c.drawPath(path, fill=1, stroke=1)
+    def above_ground(pr):
+        if pr[1] == G["G02"]: return None
+        if pr[0] == "box" and pr[2] == "Pedestales":
+            o, ex, ey, ez = pr[4], pr[5], pr[6], pr[7]
+            zt = terrain(o[0] + ex[0]/2, o[1] + ey[1]/2) - 0.02
+            top = o[2] + ez[2]
+            return ("box", pr[1], pr[2], pr[3], (o[0], o[1], zt), ex, ey, (0, 0, top - zt), pr[8])
+        return pr
+    vis = [above_ground(p) for p in P if p[1] not in (G["G00"], G["G12"], G["G13"]) and cam.cam(p[4])[2] > 0.3]
+    vis = [p for p in vis if p is not None]
+    draw_prims(c, cam, vis, outline=0.2)
+    c.setFillColor(white); c.rect(12*MM, H-30*MM, 140*MM, 16*MM, fill=1, stroke=0)
+    nice(c, 16*MM, H-20*MM, head, 12, True)
+    nice(c, 16*MM, H-26*MM, "Misma cámara que la escena del archivo .skp (generada desde la geometría del modelo).", 7.5)
+    c.showPage()
+
+render_persp("L-01", "Vista principal de referencia (tres cuartos desde el lado de tierra)", "Escena 01 — Vista principal de referencia",
+             [[-1.0, -10.8, 1.70], [5.0, 2.3, 2.0], 48])
+render_persp("L-01B", "Vista frontal recta hacia el otro extremo (como la imagen de referencia con ángulos)", "Escena 02 — Vista frontal: sección constante",
+             [[X_M + 6.5, G["W_SEC"]/2 + 0.15, 2.55], [0.0, G["W_SEC"]/2, 2.15], 52])
+
 
 # ===== L-02 planta general =====
 sheet_frame(c, "L-02", "Planta general: huella de plataforma, pórticos, asientos, apoyos y cotas", "1:75 (A3)")
@@ -230,34 +236,34 @@ for k, x in enumerate(INFO["beam_xs"]):
     a = pl.p((x, G["ymin_at"](x)-1.0, 0)); b = pl.p((x, G["ymax_at"](x)+0.9, 0))
     c.setStrokeColorRGB(0.8, 0.2, 0.2); c.setLineWidth(0.4); c.setDash([6, 2, 1, 2]); c.line(a[0], a[1], b[0], b[1]); c.setDash()
     c.circle(b[0], b[1]+3*MM, 3*MM); nice(c, b[0], b[1]+2*MM, str(k+1), 7, True, anchor="c")
-for nm, fy, lab in (("A", G["yA_at"], "A"), ("F", G["yF_at"], "F")):
+for nm, fy, lab in (("F", G["yA_at"], "F"), ("A", G["yF_at"], "A")):
     a = pl.p((-1.2, fy(0)-(fy(X_M)-fy(0))*1.2/X_M, 0)); b = pl.p((X_M+0.9, fy(X_M)+(fy(X_M)-fy(0))*0.9/X_M, 0))
     c.setStrokeColorRGB(0.8, 0.2, 0.2); c.setLineWidth(0.4); c.setDash([6, 2, 1, 2]); c.line(a[0], a[1], b[0], b[1]); c.setDash()
     c.circle(a[0]-3*MM, a[1], 3*MM); nice(c, a[0]-3*MM, a[1]-1*MM, lab, 7, True, anchor="c")
 dimline(c, pl.p((G["XS"], -4.1, 0)), pl.p((G["XE"], -4.1, 0)), "%.2f (plataforma)" % (G["XE"]-G["XS"]), off=(0, -10*MM))
-dimline(c, pl.p((0, -0.6, 0)), pl.p((X_M, -0.6, 0)), "%.2f (19 pórticos @ 0.42)" % X_M, off=(0, -3*MM))
-dimline(c, pl.p((X_M+0.4, G["yA_at"](X_M), 0)), pl.p((X_M+0.4, G["yF_at"](X_M), 0)), "%.2f boca (eje a eje)" % (G["yF_at"](X_M)-G["yA_at"](X_M)), off=(14*MM, 0))
+dimline(c, pl.p((0, -0.6, 0)), pl.p((X_M, -0.6, 0)), "%.2f (19 pórticos idénticos @ 0.42)" % X_M, off=(0, -3*MM))
+dimline(c, pl.p((X_M+0.4, G["yA_at"](X_M), 0)), pl.p((X_M+0.4, G["yF_at"](X_M), 0)), "%.2f luz entre pies (eje a eje)" % (G["yF_at"](X_M)-G["yA_at"](X_M)), off=(14*MM, 0))
 r = INFO["rampa"]
 nice(c, pl.p((G["XE"]+0.2, -2.25, 0))[0], pl.p((G["XE"]+0.2, -2.25, 0))[1], "RAMPA %.0f%% · L=%.2f · Δh=%.2f" % (r["pendiente"]*100, r["largo"], r["desnivel"]), 7)
-nice(c, pl.p((2.6, 1.8, 0))[0], pl.p((2.6, 1.8, 0))[1], "TUMBONA", 7, True)
-nice(c, pl.p((5.0, 0.85, 0))[0], pl.p((5.0, 0.85, 0))[1]-8, "BANCA", 7, True)
+nice(c, pl.p((3.2, 0.9, 0))[0], pl.p((3.2, 0.9, 0))[1], "TUMBONA CONTINUA (zona de descanso)", 7, True)
+nice(c, pl.p((5.0, 2.6, 0))[0], pl.p((5.0, 2.6, 0))[1]-8, "BANCA", 7, True)
 nice(c, pl.p((9.5, -2.0, 0))[0], pl.p((9.5, -2.0, 0))[1], "PLAZA / EXTENSIÓN EXTERIOR — NPT +0.90", 8, True)
 nice(c, pl.p((14.5, 3.5, 0))[0], pl.p((14.5, 3.5, 0))[1], "→ MAR (+X)", 10, True, col=Color(0.2, 0.4, 0.7))
-nice(c, 20*MM, H-20*MM, "Planta general (se omite la cubierta permeable de latillas para leer pórticos y mobiliario)", 9, True)
+nice(c, 20*MM, H-20*MM, "Planta general (se omite el revestimiento de cubierta para leer pórticos y mobiliario)", 9, True)
 c.showPage()
 
 # ===== L-03 elevaciones lateral y posterior =====
-sheet_frame(c, "L-03", "Elevación lateral (desde el lado cercano, -Y) y elevación posterior (desde -X)", "1:50 (A3)")
+sheet_frame(c, "L-03", "Elevación lateral (desde el lado 155°, -Y) y elevación posterior (desde -X)", "1:50 (A3)")
 s = (1000/50.0)*MM
 el = Ortho(((0, 1), (2, 1)), (1, -1), (30*MM, 175*MM), s)
 lat = [p for p in P if p[1] in ALLSTRUCT + [G["G10"]]]
-prof = [(x/10.0, -0.3, terrain(x/10.0, -0.3)) for x in range(-20, 190)]
+prof = [(x/10.0, -0.6, terrain(x/10.0, -0.6)) for x in range(-20, 190)]
 terrain_profile(c, el, prof, fill=True, base=el.p((0, 0, -1.2))[1])
 draw_prims(c, el, lat, outline=0.15)
 pm = G["frame_pts3"](18)
 dimline(c, el.p((X_M+0.6, 0, FFL)), el.p((X_M+0.6, 0, max(q[2] for q in pm)+R20)), "%.2f s/NPT" % (max(q[2] for q in pm)+R20-FFL), off=(10*MM, 0))
 dimline(c, el.p((-0.6, 0, 0)), el.p((-0.6, 0, FFL)), "NPT +0.90", off=(-8*MM, 0))
-nice(c, 30*MM, H-20*MM, "Elevación lateral (corte de terreno en y = -0.30)", 9, True)
+nice(c, 30*MM, H-20*MM, "Elevación lateral (corte de terreno en y = -0.60)", 9, True)
 s2 = (1000/50.0)*MM
 ep = Ortho(((1, -1), (2, 1)), (0, 1), (150*MM, 45*MM), s2)
 back = [p for p in P if p[1] in ALLSTRUCT]
@@ -267,36 +273,39 @@ terrain_profile(c, ep, prof2)
 nice(c, 40*MM, 130*MM, "Elevación posterior (desde -X)", 9, True)
 c.showPage()
 
-# ===== L-04 sección por la boca: ángulos y cota 2.10 =====
-sheet_frame(c, "L-04", "Elevación frontal / sección por la boca (pórtico 19): ángulos de referencia y cota de 2.10 m", "1:25 (A3)",
-            note=["Ángulos interiores del hexágono de la boca: B=165°, C=120°, D=105°, E=155° (referencia 4).",
-                  "Pies A y F = 87.5° c/u: cierre geométrico (105+120+155+165 = 545°; 720-545 = 175°).",
-                  "Cota verde: NPT (+0.90) a cara inferior de la viga C-D, a 0.45 m del pie cercano = 2.10 m."])
+# ===== L-04 sección constante: ángulos y cota 2.10 =====
+ANG = G["ANG"]
+sheet_frame(c, "L-04", "Sección tipo (idéntica en los 19 pórticos), vista desde la boca: ángulos y cota 2.10 m", "1:25 (A3)",
+            note=["Pies A y F a 90° EXACTOS (verticales) en todo el largo: sección constante (extrusión recta).",
+                  "Nominales 165/120/105/155 + 90 + 90 = 725° > 720°: se reparten 5° (1.25° c/u) en los quiebres.",
+                  "Cota verde: NPT (+0.90) al quiebre de 165° del muro vertical A = 2.10 m."])
 s = (1000/25.0)*MM
-fs = Ortho(((1, -1), (2, 1)), (0, 1), (W/2 + 110*MM, 40*MM), s)
+fs = Ortho(((1, 1), (2, 1)), (0, 1), (W/2 - 150*MM, 40*MM), s)
 mouth = [p for p in P if (p[1] == G04 and p[2] == "Portico_19_BOCA") or (p[1] == G03 and p[-1].startswith("P19_"))
          or (p[1] == G["G12"] and p[2] in ("Cota_Linea_Verde_2.10m", "Angulos_Referencia"))]
-deck = [p for p in P if p[1] == G["G07"] and p[2] in ("Vigas_Principales_D20",) and abs(p[4][0]-7.56) < 0.01]
-draw_prims(c, fs, mouth, outline=0.2)
-ya = G["yA_at"](X_M)
+tum = [p for p in P if p[1] == G["G09"] and p[2].startswith("Tumbona") and abs(p[4][0] - p[5][0]) < 0.01 and abs(p[4][0] - 3.0) < 0.5]
+draw_prims(c, fs, tum[:40] + mouth, outline=0.2)
+PY = G["PY"]
 for k, (u, z) in enumerate(G["MOUTH"]):
-    q = fs.p((X_M, ya+u, ZF+z)); nice(c, q[0]+6, q[1]+6, "ABCDEF"[k], 11, True, col=Color(0.75, 0.1, 0.3))
-labels = {1: "165°", 2: "120°", 3: "105°", 4: "155°", 0: "87.5°", 5: "87.5°"}
+    q = fs.p((X_M, PY(u), ZF+z)); nice(c, q[0]+6, q[1]+6, "ABCDEF"[k], 11, True, col=Color(0.75, 0.1, 0.3))
+labels = {1: "%.2f° (165°)" % ANG["B"], 2: "%.2f° (120°)" % ANG["C"], 3: "%.2f° (105°)" % ANG["D"], 4: "%.2f° (155°)" % ANG["E"], 0: "90°", 5: "90°"}
 for k, t in labels.items():
-    u, z = G["MOUTH"][k]; q = fs.p((X_M, ya+u, ZF+z))
-    nice(c, q[0]-30, q[1]-18 if k in (0, 5) else q[1]-24, t, 10, True, col=Color(0.75, 0.1, 0.3))
-yg = ya + G["GREEN_U"]
+    u, z = G["MOUTH"][k]; q = fs.p((X_M, PY(u), ZF+z))
+    dx = -70 if k in (1, 2, 0) else 14
+    nice(c, q[0]+dx, q[1]-22, t, 10, True, col=Color(0.75, 0.1, 0.3))
+yg = PY(G["GREEN_U"])
 a = fs.p((X_M, yg, FFL)); b = fs.p((X_M, yg, FFL+2.10))
 nice(c, a[0]-8, (a[1]+b[1])/2, "2.10", 14, True, col=Color(0.05, 0.6, 0.3), anchor="r")
-c.setStrokeColorRGB(0.4, 0.4, 0.4); c.setLineWidth(0.6); q0 = fs.p((X_M, ya-0.6, FFL)); q1 = fs.p((X_M, ya+4.9, FFL)); c.line(q0[0], q0[1], q1[0], q1[1])
-nice(c, q1[0]-4, q1[1]+3, "NPT +0.90", 8, anchor="r")
+c.setStrokeColorRGB(0.4, 0.4, 0.4); c.setLineWidth(0.6); q0 = fs.p((X_M, -0.6, FFL)); q1 = fs.p((X_M, G["W_SEC"]+0.6, FFL)); c.line(q0[0], q0[1], q1[0], q1[1])
+nice(c, q0[0]-4, q0[1]+3, "NPT +0.90", 8, anchor="r")
+nice(c, fs.p((X_M, 1.0, FFL+0.2))[0], fs.p((X_M, 1.0, FFL+0.2))[1], "tumbona (zona de descanso)", 8, col=Color(0.1, 0.5, 0.2))
 mi = INFO["mouth_info"]
 y0 = H - 22*MM
-nice(c, 20*MM, y0, "Pórtico de la boca — longitudes de eje (m)", 10, True)
-for i, (k, v) in enumerate([("A-B", mi["AB"]), ("B-C", mi["BC"]), ("C-D", mi["CD"]), ("D-E", mi["DE"]), ("E-F", mi["EF"]), ("A-F (luz)", mi["AF"])]):
-    nice(c, 20*MM, y0 - (i+1)*5*MM, "%-10s %.3f" % (k, v), 9)
-nice(c, 20*MM, y0 - 8*5*MM, "Rumbos de eje: " + ", ".join("%.1f°" % h for h in mi["headings"]), 8)
-nice(c, 20*MM, y0 - 9*5*MM, "Vista desde el mar (+X): el lado cercano (A) queda a la DERECHA.", 8)
+nice(c, W - 120*MM, y0, "Sección tipo — longitudes de eje (m)", 10, True)
+for i, (k, v) in enumerate([("A-B (vertical)", mi["AB"]), ("B-C", mi["BC"]), ("C-D", mi["CD"]), ("D-E", mi["DE"]), ("E-F (vertical)", mi["EF"]), ("A-F (luz)", mi["AF"])]):
+    nice(c, W - 120*MM, y0 - (i+1)*5*MM, "%-16s %.3f" % (k, v), 9)
+nice(c, W - 120*MM, y0 - 8*5*MM, "Rumbos de eje: " + ", ".join("%.2f°" % h for h in mi["headings"]), 8)
+nice(c, W - 120*MM, y0 - 9*5*MM, "Vista desde la boca hacia el fondo: lado A (165°) a la DERECHA.", 8)
 c.showPage()
 
 # ===== L-05 cimentación y detalles =====
@@ -394,21 +403,20 @@ mi = INFO["mouth_info"]
 ws3.append(["Dato", "Valor", "Origen", "Estado"])
 for c_ in ws3[1]: c_.font = Font(bold=True)
 ctrl = [
- ("Altura libre en línea verde (NPT→cara inferior viga C-D)", "2.100 m", "Referencia 5 (dato del cliente)", "Cumple (cota en modelo)"),
- ("Ángulo B / C / D / E (boca)", "165° / 120° / 105° / 155°", "Referencia 4 (interpretación: ángulos interiores)", "Cumple exacto"),
- ("Ángulo de pies A y F", "87.5°", "Cierre geométrico (720°−545°)/2", "Desvío de 2.5° vs. 90° indicado"),
- ("90° en plataforma", "Postes verticales ⟂ plataforma horizontal", "Referencia 4 (interpretación)", "Cumple"),
- ("Diámetro principal (pórticos, postes, vigas principales, soleras)", "Ø20 cm nominal", "Requisito del cliente", "Modelado; espesor de pared NO definido"),
- ("Ancho de boca eje a eje", "%.3f m" % mi["AF"], "Derivado (ángulos + cota 2.10)", "Por verificar con fotografía/medición"),
- ("Altura máx. boca s/NPT", "%.2f m" % (max(q[2] for q in pm)+R20-FFL), "Derivado", "Por verificar"),
- ("Largo de túnel (19 pórticos @ 0.42)", "%.2f m" % X_M, "Primer modelo (base geométrica)", "Estimado de fotografía"),
- ("Largo de plataforma", "%.2f m" % (G["XE"]-G["XS"]), "Primer modelo", "Estimado de fotografía"),
+ ("Pies A y F (muros verticales)", "90.00° exactos en los 19 pórticos", "Imagen de referencia (obligatorio)", "Cumple"),
+ ("Quiebres B / C / D / E", "%.2f° / %.2f° / %.2f° / %.2f°" % (G["ANG"]["B"], G["ANG"]["C"], G["ANG"]["D"], G["ANG"]["E"]), "Nominal 165/120/105/155; −1.25° c/u para cerrar 720°", "Ajuste mínimo justificado"),
+ ("Sección", "Constante (extrusión recta), 19 pórticos idénticos @ 0.42", "Instrucción del cliente", "Cumple"),
+ ("Cota verde", "NPT → quiebre 165° = 2.100 m", "Referencia 5", "Cumple (cota en modelo)"),
+ ("Luz entre pies (eje a eje)", "%.3f m" % mi["AF"], "Derivado (ángulos + cota 2.10 + proporciones de la imagen)", "Por verificar"),
+ ("Altura máx. s/NPT (cara superior caña)", "%.2f m" % (max(q[2] for q in pm)+R20-FFL), "Derivado", "Por verificar"),
+ ("Largo de refugio", "%.2f m" % X_M, "Primer modelo", "Estimado"),
+ ("Diámetro principal", "Ø20 cm nominal", "Requisito del cliente", "Espesor de pared NO definido"),
  ("NPT sobre terreno", "%.2f – %.2f m" % (min(FFL-q["terreno"] for q in INFO["posts"]), max(FFL-q["terreno"] for q in INFO["posts"])), "Topografía aproximada", "Requiere levantamiento"),
- ("Rampa", "%.0f%% · %.2f m · Δh %.2f m" % (INFO["rampa"]["pendiente"]*100, INFO["rampa"]["largo"], INFO["rampa"]["desnivel"]), "A.120 (tabla de pendientes, a verificar)", "Cumple con topografía supuesta"),
+ ("Rampa", "%.0f%% · %.2f m · Δh %.2f m" % (INFO["rampa"]["pendiente"]*100, INFO["rampa"]["largo"], INFO["rampa"]["desnivel"]), "A.120 (a verificar)", "Cumple con topografía supuesta"),
 ]
 for r in ctrl: ws3.append(list(r))
 for col, wdt in zip("ABCD", (58, 34, 44, 40)): ws3.column_dimensions[col].width = wdt
-xlsx_path = os.path.join(OUT, "REFUGIO_CAÑA_V01_TABLA_COMPONENTES.xlsx")
+xlsx_path = os.path.join(OUT, "REFUGIO_CAÑA_V02_TABLA_COMPONENTES.xlsx")
 wb.save(xlsx_path)
 json.dump({"mouth": INFO["mouth"], "mouth_info": INFO["mouth_info"], "rampa": INFO["rampa"],
            "n_postes": len(INFO["posts"]), "n_primitivas": len(P), "cana_total_m": {k: round(v[0], 1) for k, v in tot.items()}},
