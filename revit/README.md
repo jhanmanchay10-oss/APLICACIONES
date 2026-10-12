@@ -5,18 +5,25 @@ y plataforma de trabajo de 2.20 m, apoyado sobre un talud.
 
 ![Isométrica](preview/preview_iso.png)
 
-## Opción rápida: abrir `AndamioTalud.ifc` en Revit
+## Opción 1 (recomendada): `AndamioTalud.dyn` con Dynamo, que viene incluido en Revit
 
-1. Revit → **Archivo → Abrir → IFC** → selecciona `AndamioTalud.ifc`
-   (si te pregunta, usa la plantilla métrica de arquitectura).
-2. Revit crea el proyecto con los 4 niveles, materiales y las 140 piezas
-   (montantes y largueros como *Armazón estructural*, barandillas, plataformas, dados, escaleras y terreno).
-3. **Archivo → Guardar como → Proyecto** → `AndamioTalud.rvt`.
+1. Abre un proyecto nuevo con la plantilla **métrica** de arquitectura.
+2. Pestaña **Gestionar → Dynamo** → *Abrir* → `AndamioTalud.dyn`.
+3. Pulsa **Ejecutar** (abajo a la izquierda). El andamio se crea en el proyecto.
+4. Cierra Dynamo, abre la vista **"3D - Andamio sobre talud"** (Navegador de proyectos → Vistas 3D)
+   y guarda como `.rvt`.
 
-El IFC se regenera con `python3 revit/herramientas/exportar_ifc.py revit/AndamioTalud.ifc`
-(requiere `pip install ifcopenshell`).
+## Opción 2: abrir `AndamioTalud.ifc`
 
-## Opción nativa: generarlo con el script dentro de Revit
+1. Revit → **Archivo → Abrir → IFC** → `AndamioTalud.ifc` (IFC2x3 Coordination View 2.0).
+2. Abre una **vista 3D** (icono de la casita) y pulsa **ZF** (Zoom extensión) si no ves nada.
+3. **Guardar como → Proyecto** → `.rvt`.
+
+Para regenerar los archivos:
+`python3 revit/herramientas/exportar_ifc.py revit/AndamioTalud.ifc` (requiere `ifcopenshell`) y
+`python3 revit/herramientas/crear_dyn.py revit/AndamioTalud.dyn`.
+
+## Opción 3: pyRevit / RevitPythonShell
 
 1. Crea un proyecto nuevo con la plantilla **métrica** (`DefaultMetric.rte` / *Plantilla de arquitectura*).
    El script además fija la unidad de longitud del proyecto en **metros (0.01)**.
