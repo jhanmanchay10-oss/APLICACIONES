@@ -5,7 +5,11 @@ name: Deploy backend (Supabase + IA)
 #   SUPABASE_ACCESS_TOKEN  token personal de supabase.com/dashboard/account/tokens
 #   SUPABASE_PROJECT_REF   referencia del proyecto (la parte xxxx de https://xxxx.supabase.co)
 #   SUPABASE_DB_PASSWORD   contraseña de la base de datos del proyecto
-#   OPENAI_API_KEY         clave de platform.openai.com (sk-...)
+#   CLAUDE_API_KEY         clave de Claude (oficial o de un servicio compatible como mwapi.dev)
+#   OPENAI_API_KEY         (alternativa) clave de platform.openai.com; se usa solo si no hay CLAUDE_API_KEY
+# Variables opcionales (Settings → Secrets and variables → Actions → Variables):
+#   CLAUDE_BASE_URL        por defecto https://api.mwapi.dev/v1 (oficial: https://api.anthropic.com/v1)
+#   CLAUDE_MODEL           por defecto claude-opus-5 (p. ej. claude-sonnet-5 o claude-haiku-4-5-20251001)
 
 on:
   push:
@@ -17,7 +21,49 @@ concurrency:
   group: deploy-backend-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  CLAUDE_BASE_URL: ${{ vars.CLAUDE_BASE_URL || 'https://api.mwapi.dev/v1' }}
+  CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5' }}
+
 jobs:
+  test-ai-key:
+    name: Probar la clave de IA
+    runs-on: ubuntu-latest
+    env:
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+    steps:
+      - name: Probar CLAUDE_API_KEY con una consulta mínima
+        run: |
+          if [ -z "$CLAUDE_API_KEY" ]; then
+            echo "::notice title=Sin clave de Claude::Agrega el secreto CLAUDE_API_KEY para usar Claude."
+            exit 0
+          fi
+          base="${CLAUDE_BASE_URL%/}"
+          echo "Servicio: $base · Modelo: $CLAUDE_MODEL"
+          payload=$(jq -n --arg model "$CLAUDE_MODEL" \
+            '{model: $model, max_tokens: 1000, messages: [{role: "user", content: "Responde solo con la palabra OK"}]}')
+
+          status=$(curl -sS -o anthropic.json -w '%{http_code}' -m 120 "$base/messages" \
+            -H "content-type: application/json" -H "anthropic-version: 2023-06-01" \
+            -H "x-api-key: $CLAUDE_API_KEY" -H "Authorization: Bearer $CLAUDE_API_KEY" -d "$payload" || echo 000)
+          echo "Formato Anthropic ($base/messages): HTTP $status"
+          head -c 400 anthropic.json; echo
+          if [ "$status" = "200" ]; then
+            echo "::notice title=Clave de IA válida::Claude responde con el formato de Anthropic ($CLAUDE_MODEL)."
+            exit 0
+          fi
+
+          status2=$(curl -sS -o openai.json -w '%{http_code}' -m 120 "$base/chat/completions" \
+            -H "content-type: application/json" -H "Authorization: Bearer $CLAUDE_API_KEY" -d "$payload" || echo 000)
+          echo "Formato compatible con OpenAI ($base/chat/completions): HTTP $status2"
+          head -c 400 openai.json; echo
+          if [ "$status2" = "200" ]; then
+            echo "::notice title=Clave de IA válida::Claude responde con el formato compatible con OpenAI ($CLAUDE_MODEL)."
+            exit 0
+          fi
+          echo "::error title=La clave de IA no funcionó::Anthropic HTTP $status, OpenAI HTTP $status2. Revisa la clave, el saldo y el modelo."
+          exit 1
+
   check:
     name: Revisar funciones
     runs-on: ubuntu-latest
@@ -38,6 +84,7 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
     steps:
       - uses: actions/checkout@v5
 
@@ -61,6 +108,14 @@ jobs:
         run: |
           supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
           echo "Y" | supabase db push --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Guardar la clave de Claude en el servidor
+        if: steps.secrets.outputs.ready == 'true' && env.CLAUDE_API_KEY != ''
+        run: |
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" \
+            CLAUDE_API_KEY="$CLAUDE_API_KEY" \
+            CLAUDE_BASE_URL="$CLAUDE_BASE_URL" \
+            CLAUDE_MODEL="$CLAUDE_MODEL"
 
       - name: Guardar la clave de OpenAI en el servidor
         if: steps.secrets.outputs.ready == 'true' && env.OPENAI_API_KEY != ''

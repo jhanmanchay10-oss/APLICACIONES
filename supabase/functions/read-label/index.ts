@@ -2,14 +2,14 @@
 // Se usa cuando el código de barras no está en Open Food Facts (frecuente en productos peruanos).
 import {
   authorize,
-  callOpenAIJson,
+  callAIJson,
   CATEGORIES,
   clamp,
   corsHeaders,
   imageDataUrl,
   json,
   NUTRIENT_KEYS,
-  openAIErrorResponse,
+  aiErrorResponse,
   PER_100G_SCHEMA,
   readBody,
 } from "../_shared/common.ts";
@@ -82,7 +82,7 @@ Deno.serve(async (request: Request) => {
   if ("error" in image) return json({ error: image.error }, image.status);
 
   try {
-    const label = await callOpenAIJson<Label>(
+    const label = await callAIJson<Label>(
       SYSTEM_PROMPT,
       [
         { type: "input_text", text: "Lee la información nutricional de este producto." },
@@ -109,6 +109,6 @@ Deno.serve(async (request: Request) => {
       notes: label.notes.slice(0, 300),
     });
   } catch (error) {
-    return openAIErrorResponse(error);
+    return aiErrorResponse(error);
   }
 });

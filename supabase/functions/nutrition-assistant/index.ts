@@ -1,13 +1,15 @@
 // Edge Function: asistente de nutrición con respuestas fundamentadas.
-// Usa la búsqueda web de OpenAI limitada a fuentes de salud confiables y devuelve las citas.
+// Usa la búsqueda web (de Claude u OpenAI) limitada a fuentes de salud confiables y devuelve las citas.
 import {
+  AIError,
+  aiErrorResponse,
   authorize,
+  callClaudeChat,
   callOpenAI,
+  claudeConfigured,
   corsHeaders,
   json,
   model,
-  OpenAIError,
-  openAIErrorResponse,
   readBody,
 } from "../_shared/common.ts";
 
@@ -82,6 +84,16 @@ Deno.serve(async (request: Request) => {
     ? `${SYSTEM_PROMPT}\n\nResumen de los registros del usuario en la app (úsalo para personalizar):\n${context}`
     : SYSTEM_PROMPT;
 
+  if (claudeConfigured()) {
+    try {
+      const result = await callClaudeChat(instructions, messages, TRUSTED_DOMAINS);
+      if (!result.text) return json({ error: "analysis_failed" }, 422);
+      return json({ reply: result.text.trim(), sources: result.citations });
+    } catch (error) {
+      return aiErrorResponse(error);
+    }
+  }
+
   const input = messages.map((message) => ({ role: message.role, content: message.content }));
   const request_body: Record<string, unknown> = {
     model: model("OPENAI_ASSISTANT_MODEL"),
@@ -100,13 +112,13 @@ Deno.serve(async (request: Request) => {
       result = await callOpenAI(request_body, 90_000);
     } catch (error) {
       // Si el modelo no admite la búsqueda web, respondemos sin ella.
-      if (!(error instanceof OpenAIError) || error.status !== 400) throw error;
+      if (!(error instanceof AIError) || error.status !== 400) throw error;
       delete request_body.tools;
       result = await callOpenAI(request_body, 60_000);
     }
     if (!result.text) return json({ error: "analysis_failed" }, 422);
     return json({ reply: result.text.trim(), sources: result.citations });
   } catch (error) {
-    return openAIErrorResponse(error);
+    return aiErrorResponse(error);
   }
 });

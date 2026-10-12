@@ -17,7 +17,7 @@ Cada push a este repositorio compila el APK en GitHub Actions y lo publica en **
 | Pantalla | Qué hace |
 |---|---|
 | 🏠 Inicio | Saludo, estado del día, botón principal "Analizar plato", accesos rápidos, asistente IA, resumen semanal, últimas comidas y consejo del día |
-| 📸 Analizar plato | Cámara o galería; la IA (GPT) reconoce **cada componente** del plato, incluida la comida peruana, y estima porciones |
+| 📸 Analizar plato | Cámara o galería; la IA (Claude o GPT) reconoce **cada componente** del plato, incluida la comida peruana, y estima porciones |
 | 🔎 Alimentos detectados | Editar cantidades, cambiar, eliminar (con deshacer) o agregar alimentos; aviso de baja confianza |
 | 🚦 Resultado | Semáforo, "¿Por qué?", "¿Qué puedes mejorar?", nutrientes, gráfico y botón "Pedir ideas a Nutri" |
 | 📦 Escáner | EAN/UPC + Open Food Facts; si el producto no existe, **la IA lee la etiqueta** (tabla nutricional y octógonos). Los productos quedan guardados en el teléfono y funcionan sin internet |
@@ -31,22 +31,32 @@ La app funciona **sin conexión y sin cuenta** (SQLite local). La IA usa una ses
 
 ## 🤖 Activar la IA (sin usar la terminal)
 
-1. **OpenAI:** crea una clave en platform.openai.com → *API keys* y carga saldo en *Billing*.
+1. **Clave de IA** (una de las dos):
+   - **Claude** (recomendado): tu clave de la API de Claude, oficial (console.anthropic.com) o de un servicio compatible como **mwapi.dev**.
+   - **OpenAI:** una clave de platform.openai.com con saldo. Solo se usa si no hay clave de Claude.
 2. **Supabase:** crea un proyecto gratuito en supabase.com. Anota la *contraseña de la base de datos* y la referencia del proyecto (la parte `xxxx` de `https://xxxx.supabase.co`). Crea un token en *Account → Access Tokens*.
 3. **GitHub → Settings → Secrets and variables → Actions → New repository secret**, agrega:
 
 | Secreto | Valor |
 |---|---|
-| `OPENAI_API_KEY` | la clave `sk-...` |
+| `CLAUDE_API_KEY` | tu clave de Claude (por ejemplo, la de mwapi.dev) |
+| `OPENAI_API_KEY` | (alternativa) la clave `sk-...` de OpenAI |
 | `SUPABASE_ACCESS_TOKEN` | el token `sbp_...` |
 | `SUPABASE_PROJECT_REF` | la referencia `xxxx` |
 | `SUPABASE_DB_PASSWORD` | la contraseña de la base de datos |
 | `ANDROID_KEYSTORE_BASE64` y `ANDROID_KEYSTORE_PASSWORD` | firma fija para actualizar la app sin desinstalarla |
 
+   Opcional, en la pestaña **Variables** (no son secretas):
+
+| Variable | Por defecto | Para qué |
+|---|---|---|
+| `CLAUDE_BASE_URL` | `https://api.mwapi.dev/v1` | Dirección del servicio. Para la API oficial: `https://api.anthropic.com/v1` |
+| `CLAUDE_MODEL` | `claude-opus-5` | Modelo. Más económicos: `claude-sonnet-5` o `claude-haiku-4-5-20251001` |
+
 4. **Actions → Deploy backend → Run workflow** (crea las tablas, guarda la clave de IA en el servidor, activa la sesión de invitado y publica las funciones).
 5. **Actions → Build APK → Run workflow**: el nuevo APK sale con la IA activada (obtiene la URL y la clave publicable automáticamente).
 
-Funciones de IA (`supabase/functions/`): `analyze-meal` (fotos), `estimate-food` (texto), `read-label` (etiquetas) y `nutrition-assistant` (asistente con fuentes). Todas exigen sesión, validan las entradas y tienen límite de usos por hora. La clave de OpenAI nunca está en la app.
+Funciones de IA (`supabase/functions/`): `analyze-meal` (fotos), `estimate-food` (texto), `read-label` (etiquetas) y `nutrition-assistant` (asistente con fuentes). Todas exigen sesión, validan las entradas y tienen límite de usos por hora. La clave de IA nunca está en la app. El job **"Probar la clave de IA"** del mismo workflow hace una consulta mínima y muestra si la clave funciona y con qué formato (Anthropic o compatible con OpenAI); el servidor detecta el formato solo.
 
 ## 🏗️ Arquitectura
 
@@ -69,7 +79,7 @@ lib/
 └── widgets/         componentes reutilizables (logo, semáforo, tarjetas, gráficos)
 supabase/
 ├── migrations/      esquema PostgreSQL + RLS + bucket de fotos
-└── functions/analyze-meal/   Edge Function con GPT de OpenAI (visión)
+└── functions/analyze-meal/   Edge Functions de IA (Claude u OpenAI, visión)
 ```
 
 **¿Por qué Riverpod?** Inyección de dependencias sin `BuildContext`, estado asíncrono (`AsyncNotifier`) con carga/error integrados, providers derivados (el resumen semanal se recalcula solo cuando cambian las comidas) y overrides sencillos en pruebas. Bloc sería válido, pero requiere más código repetitivo para esta escala.
@@ -105,9 +115,10 @@ Todos los umbrales están en un único archivo: `lib/core/config/nutrition_crite
    supabase link --project-ref TU_PROYECTO
    supabase db push
    ```
-3. Despliega la función de IA con tu clave de OpenAI (GPT) (solo vive en el servidor):
+3. Despliega las funciones de IA con tu clave (solo vive en el servidor):
    ```bash
-   supabase secrets set OPENAI_API_KEY=sk-...
+   supabase secrets set CLAUDE_API_KEY=... CLAUDE_BASE_URL=https://api.mwapi.dev/v1 CLAUDE_MODEL=claude-opus-5
+   # o, en su lugar: supabase secrets set OPENAI_API_KEY=sk-...
    supabase functions deploy --use-api
    ```
 4. En GitHub → *Settings → Secrets and variables → Actions*, agrega `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY`. El siguiente build activará cuenta, sincronización y análisis de fotos.

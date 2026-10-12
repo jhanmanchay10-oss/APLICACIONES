@@ -1,8 +1,8 @@
-// Supabase Edge Function: identifica TODOS los alimentos de la foto de un plato con GPT (visión).
+// Supabase Edge Function: identifica TODOS los alimentos de la foto de un plato con IA (Claude o GPT, visión).
 // Despliegue automático: .github/workflows/deploy-backend.yml (o `supabase functions deploy`).
 import {
   authorize,
-  callOpenAIJson,
+  callAIJson,
   clamp,
   corsHeaders,
   FOOD_SCHEMA,
@@ -10,7 +10,7 @@ import {
   imageDataUrl,
   json,
   NUTRITION_RULES,
-  openAIErrorResponse,
+  aiErrorResponse,
   readBody,
   sanitizeFoods,
 } from "../_shared/common.ts";
@@ -65,7 +65,7 @@ Deno.serve(async (request: Request) => {
   if ("error" in image) return json({ error: image.error }, image.status);
 
   try {
-    const result = await callOpenAIJson<Analysis>(
+    const result = await callAIJson<Analysis>(
       SYSTEM_PROMPT,
       [
         { type: "input_text", text: "Identifica todos los alimentos de esta foto." },
@@ -83,6 +83,6 @@ Deno.serve(async (request: Request) => {
       foods: result.is_food ? sanitizeFoods(result.foods) : [],
     });
   } catch (error) {
-    return openAIErrorResponse(error);
+    return aiErrorResponse(error);
   }
 });

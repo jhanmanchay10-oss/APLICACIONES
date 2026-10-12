@@ -2,13 +2,13 @@
 // (ej. "2 huevos cocidos", "1 vaso de chicha morada") cuando no está en la base local.
 import {
   authorize,
-  callOpenAIJson,
+  callAIJson,
   corsHeaders,
   FOOD_SCHEMA,
   type Food,
   json,
   NUTRITION_RULES,
-  openAIErrorResponse,
+  aiErrorResponse,
   readBody,
   sanitizeFoods,
 } from "../_shared/common.ts";
@@ -44,7 +44,7 @@ Deno.serve(async (request: Request) => {
   if (query.length < 2 || query.length > 200) return json({ error: "invalid_query" }, 400);
 
   try {
-    const result = await callOpenAIJson<{ foods: Food[] }>(
+    const result = await callAIJson<{ foods: Food[] }>(
       SYSTEM_PROMPT,
       [{ type: "input_text", text: `Alimento: ${query}` }],
       "food_estimate",
@@ -53,6 +53,6 @@ Deno.serve(async (request: Request) => {
     if (!result) return json({ error: "analysis_failed" }, 422);
     return json({ overall_confidence: 1, notes: "", foods: sanitizeFoods(result.foods) });
   } catch (error) {
-    return openAIErrorResponse(error);
+    return aiErrorResponse(error);
   }
 });

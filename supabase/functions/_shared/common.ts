@@ -1,6 +1,12 @@
 // Utilidades compartidas por las Edge Functions de NutriSemáforo.
-// La clave OPENAI_API_KEY vive solo en los secretos del servidor.
+// Las claves de IA (CLAUDE_API_KEY u OPENAI_API_KEY) viven solo en los secretos del servidor.
+// Si CLAUDE_API_KEY está configurada se usa Claude; si no, OpenAI.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { AIError, type AIResult, type ContentPart } from "./ai_types.ts";
+import { callClaudeJson, claudeConfigured } from "./claude.ts";
+
+export { AIError, type AIResult, type ContentPart };
+export { callClaudeChat, claudeConfigured } from "./claude.ts";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,7 +35,7 @@ export type Caller = { admin: SupabaseClient; userId: string };
  * Devuelve el usuario o una respuesta de error lista para enviar.
  */
 export async function authorize(request: Request, kind: string, maxPerHour: number): Promise<Caller | Response> {
-  if (!Deno.env.get("OPENAI_API_KEY")) return json({ error: "ai_not_configured" }, 503);
+  if (!claudeConfigured() && !Deno.env.get("OPENAI_API_KEY")) return json({ error: "ai_not_configured" }, 503);
 
   const token = request.headers.get("Authorization")?.replace("Bearer ", "");
   if (!token) return json({ error: "unauthorized" }, 401);
@@ -78,20 +84,8 @@ export function imageDataUrl(body: Record<string, unknown>): { url: string } | {
   return { url: `data:${mediaType};base64,${image}` };
 }
 
-export class OpenAIError extends Error {
-  constructor(readonly status: number) {
-    super(`OpenAI ${status}`);
-  }
-}
-
-export type OpenAIResult = {
-  text: string | null;
-  refused: boolean;
-  citations: { title: string; url: string }[];
-};
-
 /** Llama a la Responses API de OpenAI y extrae el texto y las citas. */
-export async function callOpenAI(body: Record<string, unknown>, timeoutMs = 60_000): Promise<OpenAIResult> {
+export async function callOpenAI(body: Record<string, unknown>, timeoutMs = 60_000): Promise<AIResult> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -104,7 +98,7 @@ export async function callOpenAI(body: Record<string, unknown>, timeoutMs = 60_0
 
   if (!response.ok) {
     console.error("OpenAI error", response.status, await response.text());
-    throw new OpenAIError(response.status);
+    throw new AIError(response.status);
   }
 
   const data = await response.json();
@@ -136,13 +130,14 @@ export async function callOpenAI(body: Record<string, unknown>, timeoutMs = 60_0
   };
 }
 
-/** Respuesta JSON estructurada (Structured Outputs en modo estricto). */
-export async function callOpenAIJson<T>(
+/** Respuesta JSON estructurada con el proveedor configurado (Claude u OpenAI). */
+export async function callAIJson<T>(
   instructions: string,
-  content: Record<string, unknown>[],
+  content: ContentPart[],
   schemaName: string,
   schema: Record<string, unknown>,
 ): Promise<T | null> {
+  if (claudeConfigured()) return await callClaudeJson<T>(instructions, content, schema);
   const result = await callOpenAI({
     model: model(),
     instructions,
@@ -157,10 +152,11 @@ export async function callOpenAIJson<T>(
   }
 }
 
-export function openAIErrorResponse(error: unknown): Response {
-  if (error instanceof OpenAIError) {
+export function aiErrorResponse(error: unknown): Response {
+  if (error instanceof AIError) {
     if (error.status === 429) return json({ error: "rate_limited" }, 429);
-    if (error.status === 401) return json({ error: "ai_not_configured" }, 503);
+    // Clave inválida o sin permisos: la IA no está bien configurada en el servidor.
+    if (error.status === 401 || error.status === 403) return json({ error: "ai_not_configured" }, 503);
     return json({ error: "analysis_unavailable" }, 502);
   }
   if (error instanceof DOMException && error.name === "TimeoutError") {
