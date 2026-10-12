@@ -5,7 +5,18 @@ y plataforma de trabajo de 2.20 m, apoyado sobre un talud.
 
 ![Isométrica](preview/preview_iso.png)
 
-## Cómo generarlo en Revit
+## Opción rápida: abrir `AndamioTalud.ifc` en Revit
+
+1. Revit → **Archivo → Abrir → IFC** → selecciona `AndamioTalud.ifc`
+   (si te pregunta, usa la plantilla métrica de arquitectura).
+2. Revit crea el proyecto con los 4 niveles, materiales y las 140 piezas
+   (montantes y largueros como *Armazón estructural*, barandillas, plataformas, dados, escaleras y terreno).
+3. **Archivo → Guardar como → Proyecto** → `AndamioTalud.rvt`.
+
+El IFC se regenera con `python3 revit/herramientas/exportar_ifc.py revit/AndamioTalud.ifc`
+(requiere `pip install ifcopenshell`).
+
+## Opción nativa: generarlo con el script dentro de Revit
 
 1. Crea un proyecto nuevo con la plantilla **métrica** (`DefaultMetric.rte` / *Plantilla de arquitectura*).
    El script además fija la unidad de longitud del proyecto en **metros (0.01)**.
