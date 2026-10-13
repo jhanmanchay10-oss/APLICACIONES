@@ -32,6 +32,9 @@ jobs:
     env:
       CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/test-assets
       - name: Probar CLAUDE_API_KEY con una consulta mínima
         run: |
           # Quita espacios o saltos de línea que a veces se cuelan al pegar la clave.
@@ -55,6 +58,25 @@ jobs:
           head -c 400 anthropic.json; echo
           if [ "$status" = "200" ]; then
             echo "::notice title=Clave de IA válida::Claude responde con el formato de Anthropic ($CLAUDE_MODEL)."
+
+            # Prueba con imagen (plato de ejemplo): ¿el servicio le pasa la foto al modelo?
+            img=$(base64 -w0 .github/test-assets/plato.jpg)
+            for mode in texto json; do
+              jq -n --arg model "$CLAUDE_MODEL" --arg img "$img" --arg mode "$mode" '
+                {model: $model, max_tokens: 2000,
+                 messages: [{role: "user", content: [
+                   {type: "image", source: {type: "base64", media_type: "image/jpeg", data: $img}},
+                   {type: "text", text: "Enumera los alimentos que ves en la imagen."}]}]}
+                + (if $mode == "json" then {output_config: {format: {type: "json_schema", schema:
+                    {type: "object", additionalProperties: false, required: ["foods"],
+                     properties: {foods: {type: "array", items: {type: "string"}}}}}}} else {} end)' > img.json
+              s4=$(curl -sS -o img_out.json -w '%{http_code}' -m 150 "$base/messages" \
+                -H "content-type: application/json" -H "anthropic-version: 2023-06-01" \
+                -H "x-api-key: $CLAUDE_API_KEY" -H "Authorization: Bearer $CLAUDE_API_KEY" -d @img.json || echo 000)
+              echo "Imagen ($mode): HTTP $s4"
+              jq -c '{stop_reason, usage, text: ([.content[]? | select(.type == "text") | .text] | join(" ") | .[0:400]), error}' img_out.json 2>/dev/null || head -c 400 img_out.json
+              echo
+            done
             exit 0
           fi
 
