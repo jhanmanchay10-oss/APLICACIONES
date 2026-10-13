@@ -11,6 +11,7 @@ import '../../providers/core_providers.dart';
 import '../../providers/meals_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/common.dart';
+import '../../widgets/creator_credit.dart';
 import '../../widgets/meal_tile.dart';
 import '../../widgets/nutri_logo.dart';
 import '../../widgets/traffic_light_indicator.dart';
@@ -155,6 +156,8 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 28),
+              const CreatorCredit(),
             ],
           ),
         ),

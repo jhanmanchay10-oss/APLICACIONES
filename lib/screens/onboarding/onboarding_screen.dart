@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../providers/settings_provider.dart';
+import '../../widgets/creator_credit.dart';
 import '../../widgets/nutri_logo.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
@@ -72,6 +73,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
+                  const SizedBox(height: 24),
+                  const CreatorCredit(),
                 ],
               ),
             ),

@@ -32,6 +32,8 @@ void main() {
   testWidgets('la bienvenida lleva a la pantalla de inicio', (tester) async {
     await pumpApp(tester, {});
     expect(find.text('NutriSemáforo'), findsOneWidget);
+    expect(find.text('FRANK MANCHAY'), findsOneWidget);
+    expect(find.text('I.E. Julio Ponce Antúnez de Mayolo · 3° "G"'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), 'Ana');
     await tester.ensureVisible(find.text('Comenzar'));

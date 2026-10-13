@@ -3,6 +3,12 @@ abstract final class AppConstants {
   static const slogan = 'Conoce lo que comes. Mejora tus hábitos.';
   static const version = '1.1.0';
 
+  // Creador de la aplicación.
+  static const creatorName = 'Frank Manchay';
+  static const creatorSchool = 'I.E. Julio Ponce Antúnez de Mayolo';
+  static const creatorGrade = '3° "G"';
+  static const creatorCredit = 'Creado por $creatorName · $creatorSchool · $creatorGrade';
+
   static const openFoodFactsBaseUrl = 'https://world.openfoodfacts.org';
 
   /// Open Food Facts pide identificar la aplicación en el User-Agent.

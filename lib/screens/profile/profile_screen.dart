@@ -263,6 +263,11 @@ class ProfileScreen extends ConsumerWidget {
                   title: const Text('¿Cómo funciona el semáforo?'),
                   onTap: () => AppNavigation.push(context, const CriteriaScreen()),
                 ),
+                const ListTile(
+                  leading: Icon(Icons.school_outlined),
+                  title: Text('Creado por ${AppConstants.creatorName}'),
+                  subtitle: Text('${AppConstants.creatorSchool} · ${AppConstants.creatorGrade}'),
+                ),
                 ListTile(
                   leading: const Icon(Icons.info_outline),
                   title: const Text(AppConstants.appName),
@@ -272,7 +277,7 @@ class ProfileScreen extends ConsumerWidget {
                     applicationName: AppConstants.appName,
                     applicationVersion: AppConstants.version,
                     applicationIcon: const NutriLogo(size: 48),
-                    applicationLegalese: 'Herramienta educativa. No reemplaza la orientación de un profesional '
+                    applicationLegalese: '${AppConstants.creatorCredit}.\n\nHerramienta educativa. No reemplaza la orientación de un profesional '
                         'de la salud. Datos de productos: Open Food Facts (ODbL).',
                   ),
                 ),
