@@ -22,8 +22,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  CLAUDE_BASE_URL: ${{ vars.CLAUDE_BASE_URL || 'https://api.mwapi.dev/v1' }}
-  CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5' }}
+  CLAUDE_BASE_URL: ${{ vars.CLAUDE_BASE_URL || secrets.CLAUDE_BASE_URL || 'https://api.mwapi.dev/v1' }}
+  CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || secrets.CLAUDE_MODEL || 'claude-opus-5' }}
 
 jobs:
   test-ai-key:
@@ -42,7 +42,8 @@ jobs:
           fi
           echo "::add-mask::$CLAUDE_API_KEY"
           echo "Clave: ${#CLAUDE_API_KEY} caracteres, empieza con '${CLAUDE_API_KEY:0:3}'"
-          base="${CLAUDE_BASE_URL%/}"
+          CLAUDE_MODEL="$(printf '%s' "$CLAUDE_MODEL" | tr -d '[:space:]')"
+          base="$(printf '%s' "${CLAUDE_BASE_URL%/}" | tr -d '[:space:]')"
           echo "Servicio: $base · Modelo: $CLAUDE_MODEL"
           payload=$(jq -n --arg model "$CLAUDE_MODEL" \
             '{model: $model, max_tokens: 1000, messages: [{role: "user", content: "Responde solo con la palabra OK"}]}')
@@ -96,9 +97,9 @@ jobs:
         id: secrets
         run: |
           # Quita espacios o saltos de línea que a veces se cuelan al pegar los secretos.
-          for name in SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF SUPABASE_DB_PASSWORD CLAUDE_API_KEY OPENAI_API_KEY; do
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF SUPABASE_DB_PASSWORD CLAUDE_API_KEY OPENAI_API_KEY CLAUDE_MODEL CLAUDE_BASE_URL; do
             value="$(printf '%s' "${!name}" | tr -d '[:space:]')"
-            if [ -n "$value" ]; then echo "::add-mask::$value"; fi
+            case "$name" in CLAUDE_MODEL|CLAUDE_BASE_URL) ;; *) if [ -n "$value" ]; then echo "::add-mask::$value"; fi ;; esac
             echo "$name=$value" >> "$GITHUB_ENV"
             export "$name=$value"
           done
