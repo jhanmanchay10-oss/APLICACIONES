@@ -32,9 +32,6 @@ jobs:
     env:
       CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
     steps:
-      - uses: actions/checkout@v5
-        with:
-          sparse-checkout: .github/test-assets
       - name: Probar CLAUDE_API_KEY con una consulta mínima
         run: |
           # Quita espacios o saltos de línea que a veces se cuelan al pegar la clave.
@@ -59,24 +56,6 @@ jobs:
           if [ "$status" = "200" ]; then
             echo "::notice title=Clave de IA válida::Claude responde con el formato de Anthropic ($CLAUDE_MODEL)."
 
-            # Prueba con imagen (plato de ejemplo): ¿el servicio le pasa la foto al modelo?
-            img=$(base64 -w0 .github/test-assets/plato.jpg)
-            for mode in texto json; do
-              jq -n --arg model "$CLAUDE_MODEL" --arg img "$img" --arg mode "$mode" '
-                {model: $model, max_tokens: 2000,
-                 messages: [{role: "user", content: [
-                   {type: "image", source: {type: "base64", media_type: "image/jpeg", data: $img}},
-                   {type: "text", text: "Enumera los alimentos que ves en la imagen."}]}]}
-                + (if $mode == "json" then {output_config: {format: {type: "json_schema", schema:
-                    {type: "object", additionalProperties: false, required: ["foods"],
-                     properties: {foods: {type: "array", items: {type: "string"}}}}}}} else {} end)' > img.json
-              s4=$(curl -sS -o img_out.json -w '%{http_code}' -m 150 "$base/messages" \
-                -H "content-type: application/json" -H "anthropic-version: 2023-06-01" \
-                -H "x-api-key: $CLAUDE_API_KEY" -H "Authorization: Bearer $CLAUDE_API_KEY" -d @img.json || echo 000)
-              echo "Imagen ($mode): HTTP $s4"
-              jq -c '{stop_reason, usage, text: ([.content[]? | select(.type == "text") | .text] | join(" ") | .[0:400]), error}' img_out.json 2>/dev/null || head -c 400 img_out.json
-              echo
-            done
             exit 0
           fi
 
@@ -169,3 +148,26 @@ jobs:
       - name: Desplegar funciones de IA
         if: steps.secrets.outputs.ready == 'true'
         run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF" --use-api
+
+      - name: Probar la app de punta a punta (foto de ejemplo y Nutri)
+        if: steps.secrets.outputs.ready == 'true' && github.event_name == 'workflow_dispatch'
+        run: |
+          base="https://$SUPABASE_PROJECT_REF.supabase.co"
+          key=$(curl -sS "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/api-keys" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" | jq -r '[.[] | select(.type == "publishable")][0].api_key // ([.[] | select(.name == "anon")][0].api_key)')
+          token=$(curl -sS -X POST "$base/auth/v1/signup" -H "apikey: $key" -H "content-type: application/json" -d '{}' | jq -r '.access_token // empty')
+          if [ -z "$token" ]; then echo "::error::No se pudo iniciar la sesión de invitado"; exit 1; fi
+          echo "::add-mask::$token"
+          jq -n --arg img "$(base64 -w0 .github/test-assets/plato.jpg)" '{image_base64: $img, media_type: "image/jpeg"}' > photo.json
+          s1=$(curl -sS -o photo_out.json -w '%{http_code}' -m 150 -X POST "$base/functions/v1/analyze-meal" \
+            -H "apikey: $key" -H "Authorization: Bearer $token" -H "content-type: application/json" -d @photo.json)
+          echo "Foto: HTTP $s1"; jq -c '{dish_name, overall_confidence, foods: [.foods[]?.name], error}' photo_out.json || cat photo_out.json; echo
+          s2=$(curl -sS -o chat_out.json -w '%{http_code}' -m 150 -X POST "$base/functions/v1/nutrition-assistant" \
+            -H "apikey: $key" -H "Authorization: Bearer $token" -H "content-type: application/json" \
+            -d '{"messages":[{"role":"user","content":"Dame un consejo corto para comer más verduras."}]}')
+          echo "Nutri: HTTP $s2"; jq -c '{reply: (.reply // "" | .[0:200]), error}' chat_out.json || cat chat_out.json; echo
+          if [ "$s1" != "200" ] || [ "$(jq '.foods | length' photo_out.json)" = "0" ] || [ "$s2" != "200" ]; then
+            echo "::error title=Prueba de la app::La foto o Nutri no respondieron bien (foto HTTP $s1, Nutri HTTP $s2)."
+            exit 1
+          fi
+          echo "::notice title=App lista::La foto de ejemplo y Nutri funcionan de punta a punta."

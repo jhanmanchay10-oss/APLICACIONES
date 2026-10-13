@@ -166,8 +166,9 @@ function parseJsonObject<T>(text: string | null): T | null {
 function jsonInstructions(instructions: string, schema: Record<string, unknown>): string {
   return `${instructions}
 
-Responde ÚNICAMENTE con un objeto JSON válido (sin texto adicional ni bloques de código) que cumpla
-exactamente este JSON Schema:
+FORMATO DE RESPUESTA OBLIGATORIO: responde ÚNICAMENTE con un objeto JSON válido, sin texto antes
+ni después y sin bloques de código. Debe cumplir exactamente este JSON Schema (todas las claves
+"required" deben estar presentes):
 ${JSON.stringify(schema)}`;
 }
 
@@ -194,6 +195,21 @@ export async function callClaudeJson<T>(
       return result.refused ? null : parseJsonObject<T>(result.text);
     }
 
+    if (!isOfficialHost()) {
+      // Los servicios compatibles pueden ignorar output_config (y a veces el system):
+      // las instrucciones y el esquema van dentro del mensaje del usuario.
+      const data = await post("/messages", {
+        model,
+        max_tokens: MAX_TOKENS,
+        messages: [{
+          role: "user",
+          content: [...anthropicContent(content), { type: "text", text: jsonInstructions(instructions, schema) }],
+        }],
+      }, 120_000, format);
+      const result = anthropicResult(data);
+      return result.refused ? null : parseJsonObject<T>(result.text);
+    }
+
     const messages = [{ role: "user", content: anthropicContent(content) }];
     try {
       // Salida estructurada nativa: el JSON siempre cumple el esquema.
@@ -207,7 +223,7 @@ export async function callClaudeJson<T>(
       const result = anthropicResult(data);
       return result.refused ? null : parseJsonObject<T>(result.text);
     } catch (error) {
-      // Algunos servicios compatibles no admiten output_config: se pide el JSON en las instrucciones.
+      // Si output_config no se admite, se pide el JSON en las instrucciones.
       if (!(error instanceof AIError) || error.status !== 400) throw error;
       const data = await post("/messages", {
         model,
