@@ -6,6 +6,8 @@
 //   CLAUDE_MODEL       p. ej. claude-sonnet-5 (por defecto claude-opus-5)
 //   CLAUDE_API_FORMAT  anthropic | openai | auto (por defecto auto: prueba el formato
 //                      de Anthropic y, si el servicio no lo tiene, el compatible con OpenAI)
+//   CLAUDE_WEB_SEARCH  true | false: búsqueda web del asistente. Por defecto solo con la API
+//                      oficial, porque muchos servicios compatibles no la admiten.
 import { AIError, type AIResult, type ContentPart } from "./ai_types.ts";
 
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -33,6 +35,18 @@ function configuredFormat(): Format | "auto" {
 
 function isOfficialHost(): boolean {
   return new URL(baseUrl()).hostname === "api.anthropic.com";
+}
+
+function webSearchEnabled(): boolean {
+  const value = Deno.env.get("CLAUDE_WEB_SEARCH")?.toLowerCase();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return isOfficialHost();
+}
+
+/** Errores que no se arreglan reintentando sin herramientas (clave, permisos, límite de uso). */
+function isAccountError(error: unknown): boolean {
+  return error instanceof AIError && [401, 402, 403, 429].includes(error.status);
 }
 
 async function post(path: string, body: unknown, timeoutMs: number, format: Format): Promise<Record<string, unknown>> {
@@ -229,6 +243,17 @@ export async function callClaudeChat(
       return openAIResult(data);
     }
 
+    const plain = async () => {
+      const data = await post("/messages", {
+        model,
+        max_tokens: 4000,
+        system: instructions,
+        messages,
+      }, 90_000, format);
+      return anthropicResult(data);
+    };
+    if (!webSearchEnabled()) return await plain();
+
     const webSearch = {
       type: model.includes("haiku") ? "web_search_20250305" : "web_search_20260209",
       name: "web_search",
@@ -252,14 +277,10 @@ export async function callClaudeChat(
       }
       throw new AIError(504);
     } catch (error) {
-      if (!(error instanceof AIError) || error.status !== 400) throw error;
-      const data = await post("/messages", {
-        model,
-        max_tokens: 4000,
-        system: instructions,
-        messages,
-      }, 90_000, format);
-      return anthropicResult(data);
+      // Si la búsqueda web falla (servicio que no la admite, tiempo agotado), se responde sin ella.
+      if (isAccountError(error)) throw error;
+      console.error("Búsqueda web no disponible; se responde sin ella", error);
+      return await plain();
     }
   });
 }

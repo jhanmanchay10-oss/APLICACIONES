@@ -55,17 +55,6 @@ jobs:
           head -c 400 anthropic.json; echo
           if [ "$status" = "200" ]; then
             echo "::notice title=Clave de IA válida::Claude responde con el formato de Anthropic ($CLAUDE_MODEL)."
-            # Diagnóstico: ¿el servicio admite la búsqueda web que usa el asistente Nutri?
-            search=$(jq -n --arg model "$CLAUDE_MODEL" '{model: $model, max_tokens: 2000,
-              tools: [{type: "web_search_20260209", name: "web_search", max_uses: 1, allowed_domains: ["who.int"]}],
-              messages: [{role: "user", content: "Según la OMS, ¿cuánta sal al día se recomienda? Responde en una frase."}]}')
-            start=$(date +%s)
-            s3=$(curl -sS -o search.json -w '%{http_code}' -m 150 "$base/messages" \
-              -H "content-type: application/json" -H "anthropic-version: 2023-06-01" \
-              -H "x-api-key: $CLAUDE_API_KEY" -H "Authorization: Bearer $CLAUDE_API_KEY" -d "$search" || echo 000)
-            echo "Búsqueda web: HTTP $s3 en $(( $(date +%s) - start ))s"
-            jq -c '{stop_reason, usage, types: [.content[]?.type], error}' search.json 2>/dev/null || head -c 600 search.json
-            echo
             exit 0
           fi
 
